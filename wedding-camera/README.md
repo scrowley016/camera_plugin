@@ -1,4 +1,4 @@
-# Wedding Camera v0.5
+# Wedding Camera v0.5.1
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -88,3 +88,7 @@ Drop this on any page or post for a printable/scannable share card guests can se
 `url`, `eyebrow`, and `size` (QR pixel size) are also available as optional attributes.
 
 QR codes are generated entirely in the guest's/admin's browser (via a bundled, MIT-licensed encoder) — no third-party services or network calls involved.
+
+## v0.5.1
+
+Fixes a bug where the camera/wall/QR pages could render with no styling at all (invisible text, unstyled boxes, non-working-looking controls) on some themes and page builders — the stylesheet was only being enqueued from inside the shortcode itself, which is often too late for WordPress to include it in `<head>`. Styles are now enqueued as early as possible, and the plugin also inlines its CSS directly into each shortcode's output as a fallback, so styling can no longer silently fail to load.
