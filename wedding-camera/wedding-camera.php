@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.5.2
+ * Version: 0.5.3
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.5.2' );
+define( 'WCAM_VERSION', '0.5.3' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -426,9 +426,7 @@ HTML;
         $settings = $this->settings();
         $frames = $settings['frames_enabled'] === '1' ? $this->frames() : [];
 
-        wp_enqueue_style( 'wcam' );
-        wp_enqueue_script( 'wcam-camera' );
-        wp_localize_script( 'wcam-camera', 'WeddingCamera', [
+        $config = [
             'uploadUrl'     => esc_url_raw( rest_url( 'wedding-camera/v1/upload' ) ),
             'toggleBaseUrl' => esc_url_raw( rest_url( 'wedding-camera/v1/mine/' ) ),
             'defaultLive'   => $settings['default_live'] === '1',
@@ -436,11 +434,20 @@ HTML;
             'frames'        => $frames,
             'successSingle' => $settings['success_single_text'],
             'successMulti'  => $settings['success_multi_text'],
-        ] );
+        ];
+
+        wp_enqueue_style( 'wcam' );
+        wp_enqueue_script( 'wcam-camera' );
+        // wp_localize_script() alone has proven unreliable on some hosts
+        // (its <script>var WeddingCamera=...</script> block can silently
+        // fail to print), so the same data is also printed inline below as
+        // the guaranteed source of truth.
+        wp_localize_script( 'wcam-camera', 'WeddingCamera', $config );
 
         ob_start(); ?>
         <?php echo $this->inline_debug_script_once(); ?>
         <?php echo $this->inline_submit_guard_once(); ?>
+        <script id="wcam-camera-config">var WeddingCamera = <?php echo wp_json_encode( $config ); ?>;</script>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-app" id="wcam-app">
             <section class="wcam-hero">
@@ -532,19 +539,22 @@ HTML;
             'date'       => '10 · 16 · 26',
         ], $atts, 'wedding_photo_wall' );
 
-        wp_enqueue_style( 'wcam' );
-        wp_enqueue_script( 'wcam-wall' );
-        wp_localize_script( 'wcam-wall', 'WeddingWall', [
+        $config = [
             'liveUrl'         => esc_url_raw( rest_url( 'wedding-camera/v1/live' ) ),
             'featureEveryMs'  => max( 10, absint( $settings['feature_seconds'] ) ) * 1000,
             'refreshEveryMs'  => max( 3, absint( $settings['refresh_seconds'] ) ) * 1000,
             'featureEnabled'  => $settings['feature_enabled'] === '1',
             'showCaptions'    => $settings['show_captions'] === '1',
             'showGuestNames'  => $settings['show_guest_names'] === '1',
-        ] );
+        ];
+
+        wp_enqueue_style( 'wcam' );
+        wp_enqueue_script( 'wcam-wall' );
+        wp_localize_script( 'wcam-wall', 'WeddingWall', $config );
 
         ob_start(); ?>
         <?php echo $this->inline_debug_script_once(); ?>
+        <script id="wcam-wall-config">var WeddingWall = <?php echo wp_json_encode( $config ); ?>;</script>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-wall" id="wcam-wall">
             <header class="wcam-wall-header"><p><?php echo esc_html( $atts['eyebrow'] ); ?></p><h1><?php echo esc_html( $atts['title'] ); ?></h1><span><?php echo esc_html( $atts['date'] ); ?></span></header>

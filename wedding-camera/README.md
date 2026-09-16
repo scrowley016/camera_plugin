@@ -1,4 +1,4 @@
-# Wedding Camera v0.5.2
+# Wedding Camera v0.5.3
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -98,3 +98,10 @@ Fixes a bug where the camera/wall/QR pages could render with no styling at all (
 Two more reliability fixes:
 - The camera page now blocks the browser's default form submit at the earliest possible moment, independent of whether the rest of the upload script manages to load. Previously, if something on a guest's device prevented the upload script from running, submitting the form fell back to a native browser submission that reloaded the page with a useless `?photo=filename.jpg` in the URL and silently lost their selected photos. Now it just won't submit that way, full stop.
 - Any JavaScript error on the page (ours or a conflicting theme/plugin script) now shows as a small dismissible red banner at the top of the page, so a broken page can be diagnosed from a screenshot alone — no browser devtools needed.
+
+## v0.5.3
+
+Two root-cause fixes found by inspecting an actual affected page's saved HTML:
+
+- The camera and Live Wall pages rely on WordPress's `wp_localize_script()` to inject their configuration (upload URL, settings, etc.) as a small `<script>var WeddingCamera = {...}</script>` block. On at least one real host that block was silently missing from the page entirely — the plugin's script would load fine, immediately notice its config was undefined, and quietly do nothing at all (no console error, no preview, no working buttons, and a plain browser form submit that reloads the page instead of uploading). That configuration is now also printed directly and reliably as part of the shortcode's own HTML output, independent of `wp_localize_script()`.
+- Text could render invisibly (white on white) inside text inputs and some buttons on themes/browsers using dark mode: we set an explicit light background on those controls but never set an explicit text color, so a browser in dark mode could supply its own light default text color for native form controls. The plugin's guest-facing pages now explicitly opt out of native dark-mode form-control styling, and all inputs/buttons set their text color explicitly.

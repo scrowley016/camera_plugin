@@ -7,6 +7,18 @@
   --wcam-line: rgba(47,42,50,.14);
 }
 
+.wcam-app,
+.wcam-wall,
+.wcam-qr-sheet {
+  /* Force light-mode native rendering for form controls (checkboxes,
+     text inputs) within our own UI, regardless of the visitor's or host
+     theme's dark-mode preference. Without this, a browser in dark mode
+     can supply its own light default text color for inputs even though
+     we set an explicit white/cream background, producing invisible
+     white-on-white text. */
+  color-scheme: light;
+}
+
 .wcam-app {
   max-width: 760px;
   margin: 0 auto;
@@ -103,6 +115,7 @@
   border-radius:14px;
   padding:13px 14px;
   font:inherit;
+  color:var(--wcam-ink);
   background:white;
 }
 
@@ -158,6 +171,7 @@
   border:0;
   padding:11px 8px;
   background:white;
+  color:var(--wcam-ink);
   cursor:pointer;
   font-weight:700;
 }
