@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.5.3
+ * Version: 0.6.0
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.5.3' );
+define( 'WCAM_VERSION', '0.6.0' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -52,6 +52,8 @@ final class Wedding_Camera {
             'max_upload_mb'       => 20,
             'refresh_seconds'     => 7,
             'feature_seconds'     => 25,
+            'wall_layout'         => 'rows',
+            'wall_rows'           => 3,
             'guest_eyebrow'        => 'Shannon + Alex',
             'guest_title'          => 'Capture the Magic',
             'guest_intro'          => 'Share the wedding through your eyes.',
@@ -539,6 +541,9 @@ HTML;
             'date'       => '10 · 16 · 26',
         ], $atts, 'wedding_photo_wall' );
 
+        $layout = $settings['wall_layout'] === 'grid' ? 'grid' : 'rows';
+        $rows   = max( 2, min( 5, absint( $settings['wall_rows'] ) ) );
+
         $config = [
             'liveUrl'         => esc_url_raw( rest_url( 'wedding-camera/v1/live' ) ),
             'featureEveryMs'  => max( 10, absint( $settings['feature_seconds'] ) ) * 1000,
@@ -546,6 +551,8 @@ HTML;
             'featureEnabled'  => $settings['feature_enabled'] === '1',
             'showCaptions'    => $settings['show_captions'] === '1',
             'showGuestNames'  => $settings['show_guest_names'] === '1',
+            'layout'          => $layout,
+            'rows'            => $rows,
         ];
 
         wp_enqueue_style( 'wcam' );
@@ -567,7 +574,11 @@ HTML;
                 </aside>
                 <?php endif; ?>
             </div>
+            <?php if ( $layout === 'rows' ) : ?>
+            <div id="wcam-wall-rows" class="wcam-wall-rows"></div>
+            <?php else : ?>
             <div id="wcam-wall-grid" class="wcam-wall-grid"></div>
+            <?php endif; ?>
             <div id="wcam-wall-empty" class="wcam-wall-empty"><strong>The photo wall is waking up ✨</strong><span>Scan the wedding QR code to add the first photo.</span></div>
             <div id="wcam-feature" class="wcam-feature" hidden aria-hidden="true">
                 <div class="wcam-feature-backdrop"></div>
@@ -740,6 +751,13 @@ HTML;
 
                 <section class="wcam-settings-card">
                     <h2>Live Wall</h2>
+                    <label class="wcam-setting-row"><span>Layout</span>
+                        <select name="wall_layout">
+                            <option value="rows" <?php selected( $s['wall_layout'], 'rows' ); ?>>Scrolling rows (photos drift sideways, great for a TV/projector)</option>
+                            <option value="grid" <?php selected( $s['wall_layout'], 'grid' ); ?>>Classic grid (static, Pinterest-style)</option>
+                        </select>
+                    </label>
+                    <label class="wcam-setting-row"><span>Number of scrolling rows</span><input type="number" min="2" max="5" name="wall_rows" value="<?php echo esc_attr( $s['wall_rows'] ); ?>"><small>Only used by the Scrolling rows layout.</small></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="show_captions" value="1" <?php checked( $s['show_captions'], '1' ); ?>><span><strong>Show captions</strong></span></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="show_guest_names" value="1" <?php checked( $s['show_guest_names'], '1' ); ?>><span><strong>Show guest names</strong></span></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="feature_enabled" value="1" <?php checked( $s['feature_enabled'], '1' ); ?>><span><strong>Featured photo moments</strong><small>Periodically enlarges one random live photo.</small></span></label>
@@ -844,7 +862,10 @@ HTML;
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Not allowed.' );
         check_admin_referer( 'wcam_save_settings' );
 
-        $settings = [
+        // Merged onto the current settings (rather than replacing the option
+        // outright) so this form never wipes out fields it doesn't render,
+        // such as the Share & QR page's camera URL / share card text.
+        $settings = array_merge( $this->settings(), [
             'uploads_open'     => isset( $_POST['uploads_open'] ) ? '1' : '0',
             'default_live'     => isset( $_POST['default_live'] ) ? '1' : '0',
             'frames_enabled'   => isset( $_POST['frames_enabled'] ) ? '1' : '0',
@@ -854,6 +875,8 @@ HTML;
             'max_upload_mb'    => max( 1, min( 50, absint( $_POST['max_upload_mb'] ?? 20 ) ) ),
             'refresh_seconds'  => max( 3, min( 60, absint( $_POST['refresh_seconds'] ?? 7 ) ) ),
             'feature_seconds'  => max( 10, min( 300, absint( $_POST['feature_seconds'] ?? 25 ) ) ),
+            'wall_layout'      => ( $_POST['wall_layout'] ?? '' ) === 'grid' ? 'grid' : 'rows',
+            'wall_rows'        => max( 2, min( 5, absint( $_POST['wall_rows'] ?? 3 ) ) ),
             'guest_eyebrow'       => sanitize_text_field( wp_unslash( $_POST['guest_eyebrow'] ?? 'Shannon + Alex' ) ),
             'guest_title'         => sanitize_text_field( wp_unslash( $_POST['guest_title'] ?? 'Capture the Magic' ) ),
             'guest_intro'         => sanitize_textarea_field( wp_unslash( $_POST['guest_intro'] ?? 'Share the wedding through your eyes.' ) ),
@@ -863,7 +886,7 @@ HTML;
             'submit_button_text'  => sanitize_text_field( wp_unslash( $_POST['submit_button_text'] ?? 'Add to Our Album' ) ),
             'success_single_text' => sanitize_text_field( wp_unslash( $_POST['success_single_text'] ?? '✨ We got it! Your photo is in the wedding album.' ) ),
             'success_multi_text'  => sanitize_text_field( wp_unslash( $_POST['success_multi_text'] ?? '✨ We got them! {count} photos are in the wedding album.' ) ),
-        ];
+        ] );
         update_option( self::OPTION_SETTINGS, $settings, false );
 
         $ids = isset( $_POST['frame_ids'] ) && is_array( $_POST['frame_ids'] ) ? array_map( 'absint', wp_unslash( $_POST['frame_ids'] ) ) : [];

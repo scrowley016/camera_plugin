@@ -510,3 +510,65 @@
   }
   .wcam-qr-card { box-shadow:none; break-inside:avoid; }
 }
+
+
+/* v0.6 scrolling-rows Live Wall layout */
+.wcam-wall-rows {
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  max-width:1800px;
+  margin:0 auto;
+}
+.wcam-wall-row {
+  overflow:hidden;
+  -webkit-mask-image:linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%);
+  mask-image:linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%);
+}
+.wcam-wall-row[hidden] { display:none; }
+.wcam-wall-track {
+  display:flex;
+  align-items:stretch;
+  gap:14px;
+  width:max-content;
+  animation-name:wcam-scroll-x;
+  animation-timing-function:linear;
+  animation-iteration-count:infinite;
+}
+.wcam-wall-row:nth-child(even) .wcam-wall-track { animation-direction:reverse; }
+.wcam-wall-row:hover .wcam-wall-track { animation-play-state:paused; }
+@keyframes wcam-scroll-x {
+  from { transform:translateX(0); }
+  to { transform:translateX(-50%); }
+}
+.wcam-wall-row-card {
+  flex:0 0 auto;
+  height:230px;
+  border-radius:16px;
+  overflow:hidden;
+  position:relative;
+  background:white;
+  box-shadow:0 10px 26px rgba(47,42,50,.10);
+}
+.wcam-wall-row-card .wcam-photo-media { height:100%; }
+.wcam-wall-row-card .wcam-photo-image { height:100%; width:auto; display:block; }
+.wcam-wall-row-card .wcam-photo-frame { height:100%; width:auto; object-fit:fill; }
+.wcam-wall-row-card figcaption {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  z-index:3;
+  padding:20px 12px 10px;
+  font-size:.82rem;
+  color:#fff;
+  background:linear-gradient(to top, rgba(21,18,24,.78), transparent);
+}
+
+@media (max-width:700px) {
+  .wcam-wall-row-card { height:150px; }
+  .wcam-wall-rows { gap:10px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .wcam-wall-track { animation:none; }
+  .wcam-wall-row { overflow-x:auto; -webkit-mask-image:none; mask-image:none; }
+}

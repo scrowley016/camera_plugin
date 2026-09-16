@@ -1,4 +1,4 @@
-# Wedding Camera v0.5.3
+# Wedding Camera v0.6.0
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -105,3 +105,14 @@ Two root-cause fixes found by inspecting an actual affected page's saved HTML:
 
 - The camera and Live Wall pages rely on WordPress's `wp_localize_script()` to inject their configuration (upload URL, settings, etc.) as a small `<script>var WeddingCamera = {...}</script>` block. On at least one real host that block was silently missing from the page entirely — the plugin's script would load fine, immediately notice its config was undefined, and quietly do nothing at all (no console error, no preview, no working buttons, and a plain browser form submit that reloads the page instead of uploading). That configuration is now also printed directly and reliably as part of the shortcode's own HTML output, independent of `wp_localize_script()`.
 - Text could render invisibly (white on white) inside text inputs and some buttons on themes/browsers using dark mode: we set an explicit light background on those controls but never set an explicit text color, so a browser in dark mode could supply its own light default text color for native form controls. The plugin's guest-facing pages now explicitly opt out of native dark-mode form-control styling, and all inputs/buttons set their text color explicitly.
+
+## v0.6.0
+
+### Scrolling-rows Live Wall layout
+The Live Wall (`[wedding_photo_wall]`) has a new default layout: photos flow across a few horizontal rows that continuously drift sideways (alternating direction row to row), instead of the previous static Pinterest-style grid. Great for a TV or projector at the reception. Configure it under Wedding Camera → Settings & Frames → Live Wall:
+- **Layout** — Scrolling rows (new default) or Classic grid (the old static layout, still available).
+- **Number of scrolling rows** — 2 to 5.
+
+Each photo always scrolls in the same row (so photos don't visually jump between rows as new ones arrive), and a row only restarts its motion when a new photo actually lands in it — otherwise the scroll never stutters. Motion respects the "reduce motion" accessibility setting (falls back to a manually-scrollable strip). The Featured Photo spotlight overlay still works the same as before, on top of either layout.
+
+Also fixes a pre-existing bug: saving the main Settings & Frames form could silently erase the Share & QR page's camera URL and share card text, since that form didn't include those fields. Settings are now merged rather than replaced.
