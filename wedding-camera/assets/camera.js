@@ -84,6 +84,91 @@
     renderPreview();
   }));
 
+  // ---- Live in-browser camera capture ----
+  const openCameraBtn = document.getElementById("wcam-open-camera");
+  const cameraPanel = document.getElementById("wcam-camera-panel");
+  const cameraVideo = document.getElementById("wcam-camera-video");
+  const cameraCanvas = document.getElementById("wcam-camera-canvas");
+  const cameraError = document.getElementById("wcam-camera-error");
+  const cameraSwitchBtn = document.getElementById("wcam-camera-switch");
+  const cameraShutterBtn = document.getElementById("wcam-camera-shutter");
+  const cameraCloseBtn = document.getElementById("wcam-camera-close");
+  const cameraShotsEl = document.getElementById("wcam-camera-shots");
+  const cameraDoneBtn = document.getElementById("wcam-camera-done");
+
+  let cameraStream = null;
+  let facingMode = "environment";
+  let cameraShots = []; // { blob, url }
+
+  const cameraSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+  if (openCameraBtn && cameraPanel && cameraVideo && cameraSupported()) {
+    openCameraBtn.hidden = false;
+    openCameraBtn.addEventListener("click", openCamera);
+
+    async function startStream() {
+      stopStream();
+      if (cameraError) cameraError.hidden = true;
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false });
+        cameraVideo.srcObject = cameraStream;
+        if (cameraSwitchBtn) cameraSwitchBtn.hidden = false;
+      } catch (err) {
+        if (cameraError) { cameraError.textContent = "Could not access your camera. You can still choose photos from your gallery instead."; cameraError.hidden = false; }
+      }
+    }
+
+    function stopStream() {
+      if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); cameraStream = null; }
+    }
+
+    function openCamera() { cameraPanel.hidden = false; renderShots(); startStream(); }
+    function closeCamera() { stopStream(); cameraPanel.hidden = true; }
+
+    cameraCloseBtn?.addEventListener("click", closeCamera);
+    cameraSwitchBtn?.addEventListener("click", () => { facingMode = facingMode === "environment" ? "user" : "environment"; startStream(); });
+    window.addEventListener("pagehide", stopStream);
+
+    cameraShutterBtn?.addEventListener("click", () => {
+      if (!cameraVideo.videoWidth) return;
+      cameraCanvas.width = cameraVideo.videoWidth;
+      cameraCanvas.height = cameraVideo.videoHeight;
+      cameraCanvas.getContext("2d").drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+      cameraCanvas.toBlob(blob => {
+        if (!blob) return;
+        cameraShots.push({ blob, url: URL.createObjectURL(blob) });
+        renderShots();
+      }, "image/jpeg", 0.92);
+    });
+
+    function renderShots() {
+      cameraShotsEl.innerHTML = "";
+      cameraShots.forEach((shot, index) => {
+        const item = document.createElement("div"); item.className = "wcam-camera-shot";
+        const img = document.createElement("img"); img.src = shot.url; img.alt = `Captured photo ${index + 1}`;
+        item.appendChild(img);
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "wcam-camera-shot-remove"; remove.setAttribute("aria-label", "Remove this photo"); remove.textContent = "×";
+        remove.addEventListener("click", () => { URL.revokeObjectURL(shot.url); cameraShots.splice(index, 1); renderShots(); });
+        item.appendChild(remove);
+        cameraShotsEl.appendChild(item);
+      });
+      cameraDoneBtn.hidden = cameraShots.length === 0;
+    }
+
+    cameraDoneBtn?.addEventListener("click", () => {
+      if (!cameraShots.length) return;
+      const dt = new DataTransfer();
+      Array.from(filesInput.files || []).forEach(file => dt.items.add(file));
+      cameraShots.forEach((shot, index) => dt.items.add(new File([shot.blob], `camera-${Date.now()}-${index}.jpg`, { type: "image/jpeg" })));
+      filesInput.files = dt.files;
+      cameraShots.forEach(shot => URL.revokeObjectURL(shot.url));
+      cameraShots = [];
+      renderShots();
+      closeCamera();
+      renderPreview();
+    });
+  }
+
   form.addEventListener("submit", async event => {
     event.preventDefault();
     const files = Array.from(filesInput.files || []); if (!files.length) return;
