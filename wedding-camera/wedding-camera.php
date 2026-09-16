@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.5.1
+ * Version: 0.5.2
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.5.1' );
+define( 'WCAM_VERSION', '0.5.2' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -181,6 +181,73 @@ final class Wedding_Camera {
         $css = file_get_contents( $path );
         if ( ! $css ) return '';
         return '<style id="wcam-inline-style">' . $css . '</style>';
+    }
+
+    /**
+     * Prints a tiny inline script, once per page, that catches any
+     * JavaScript error on the page (ours or a conflicting plugin/theme
+     * script) and shows it in a visible on-page banner. This lets a
+     * non-technical site owner see exactly what broke without opening
+     * browser devtools — especially useful since a broken guest-camera
+     * page tends to navigate away before anyone can read the console.
+     */
+    private function inline_debug_script_once() {
+        static $printed = false;
+        if ( $printed ) return '';
+        $printed = true;
+        return <<<'HTML'
+<script id="wcam-debug-script">(function(){
+  function banner(msg){
+    try {
+      var el = document.getElementById("wcam-debug-banner");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "wcam-debug-banner";
+        el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#8a3b3b;color:#fff;padding:10px 40px 10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;white-space:pre-wrap;word-break:break-word;";
+        var close = document.createElement("button");
+        close.textContent = "×";
+        close.setAttribute("aria-label", "Dismiss");
+        close.style.cssText = "position:absolute;top:6px;right:10px;background:none;border:0;color:#fff;font-size:18px;line-height:1;cursor:pointer;";
+        close.addEventListener("click", function(){ el.remove(); });
+        el.appendChild(close);
+        var text = document.createElement("div");
+        text.id = "wcam-debug-banner-text";
+        el.appendChild(text);
+        (document.body || document.documentElement).appendChild(el);
+      }
+      var textEl = document.getElementById("wcam-debug-banner-text");
+      textEl.textContent += (textEl.textContent ? "\n" : "") + msg;
+    } catch (e) {}
+  }
+  window.addEventListener("error", function(e){
+    banner("Page error: " + e.message + " (" + (e.filename || "") + ":" + (e.lineno || "") + ")");
+  });
+  window.addEventListener("unhandledrejection", function(e){
+    var reason = e.reason && e.reason.message ? e.reason.message : e.reason;
+    banner("Unhandled promise error: " + reason);
+  });
+})();</script>
+HTML;
+    }
+
+    /**
+     * Prints a tiny inline script, once per page, that always blocks the
+     * native browser submit on the upload form — independent of whether
+     * camera.js loads/attaches its own handler. Without this, a guest whose
+     * browser never got the real upload script for any reason (blocked
+     * request, conflicting plugin, etc.) would trigger a native form submit
+     * that reloads the page with a useless "?photo=filename" in the URL and
+     * silently loses their selected photos instead of just not uploading.
+     */
+    private function inline_submit_guard_once() {
+        static $printed = false;
+        if ( $printed ) return '';
+        $printed = true;
+        return <<<'HTML'
+<script id="wcam-submit-guard">document.addEventListener("submit", function(e){
+  if (e.target && e.target.id === "wcam-upload-form") e.preventDefault();
+}, true);</script>
+HTML;
     }
 
     public function admin_assets( $hook ) {
@@ -372,6 +439,8 @@ final class Wedding_Camera {
         ] );
 
         ob_start(); ?>
+        <?php echo $this->inline_debug_script_once(); ?>
+        <?php echo $this->inline_submit_guard_once(); ?>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-app" id="wcam-app">
             <section class="wcam-hero">
@@ -475,6 +544,7 @@ final class Wedding_Camera {
         ] );
 
         ob_start(); ?>
+        <?php echo $this->inline_debug_script_once(); ?>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-wall" id="wcam-wall">
             <header class="wcam-wall-header"><p><?php echo esc_html( $atts['eyebrow'] ); ?></p><h1><?php echo esc_html( $atts['title'] ); ?></h1><span><?php echo esc_html( $atts['date'] ); ?></span></header>
@@ -525,6 +595,7 @@ final class Wedding_Camera {
         wp_enqueue_script( 'wcam-share' );
 
         ob_start(); ?>
+        <?php echo $this->inline_debug_script_once(); ?>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-qr-sheet">
             <?php for ( $i = 0; $i < $copies; $i++ ) : ?>

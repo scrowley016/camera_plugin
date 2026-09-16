@@ -1,4 +1,4 @@
-# Wedding Camera v0.5.1
+# Wedding Camera v0.5.2
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -92,3 +92,9 @@ QR codes are generated entirely in the guest's/admin's browser (via a bundled, M
 ## v0.5.1
 
 Fixes a bug where the camera/wall/QR pages could render with no styling at all (invisible text, unstyled boxes, non-working-looking controls) on some themes and page builders — the stylesheet was only being enqueued from inside the shortcode itself, which is often too late for WordPress to include it in `<head>`. Styles are now enqueued as early as possible, and the plugin also inlines its CSS directly into each shortcode's output as a fallback, so styling can no longer silently fail to load.
+
+## v0.5.2
+
+Two more reliability fixes:
+- The camera page now blocks the browser's default form submit at the earliest possible moment, independent of whether the rest of the upload script manages to load. Previously, if something on a guest's device prevented the upload script from running, submitting the form fell back to a native browser submission that reloaded the page with a useless `?photo=filename.jpg` in the URL and silently lost their selected photos. Now it just won't submit that way, full stop.
+- Any JavaScript error on the page (ours or a conflicting theme/plugin script) now shows as a small dismissible red banner at the top of the page, so a broken page can be diagnosed from a screenshot alone — no browser devtools needed.
