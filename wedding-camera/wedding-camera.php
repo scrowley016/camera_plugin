@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.5.0
+ * Version: 0.5.1
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.5.0' );
+define( 'WCAM_VERSION', '0.5.1' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -141,6 +141,46 @@ final class Wedding_Camera {
         wp_register_script( 'wcam-wall', WCAM_URL . 'assets/live-wall.js', [], WCAM_VERSION, true );
         wp_register_script( 'wcam-qrlib', WCAM_URL . 'assets/qrcode.lib.js', [], WCAM_VERSION, true );
         wp_register_script( 'wcam-share', WCAM_URL . 'assets/share-qr.js', [ 'wcam-qrlib' ], WCAM_VERSION, true );
+
+        // Enqueue as early as possible (in <head>) whenever the current page
+        // actually contains one of our shortcodes. Enqueuing only from
+        // inside the shortcode callback itself is too late for styles —
+        // wp_head() has usually already printed by the time content renders
+        // — so pages would silently render with no CSS at all.
+        if ( is_singular() ) {
+            $post = get_post();
+            $content = $post ? (string) $post->post_content : '';
+            if ( has_shortcode( $content, 'wedding_camera' ) ) {
+                wp_enqueue_style( 'wcam' );
+                wp_enqueue_script( 'wcam-camera' );
+            }
+            if ( has_shortcode( $content, 'wedding_photo_wall' ) ) {
+                wp_enqueue_style( 'wcam' );
+                wp_enqueue_script( 'wcam-wall' );
+            }
+            if ( has_shortcode( $content, 'wedding_camera_qr' ) ) {
+                wp_enqueue_style( 'wcam' );
+                wp_enqueue_script( 'wcam-qrlib' );
+                wp_enqueue_script( 'wcam-share' );
+            }
+        }
+    }
+
+    /**
+     * Prints the plugin stylesheet inline, once per page. This is a
+     * belt-and-suspenders fallback for page builders/caching setups where
+     * has_shortcode() can't see the shortcode in post_content (it's stored
+     * as block/widget data instead), so styling never silently breaks.
+     */
+    private function inline_style_once() {
+        static $printed = false;
+        if ( $printed ) return '';
+        $printed = true;
+        $path = WCAM_PATH . 'assets/wedding-camera.css';
+        if ( ! file_exists( $path ) ) return '';
+        $css = file_get_contents( $path );
+        if ( ! $css ) return '';
+        return '<style id="wcam-inline-style">' . $css . '</style>';
     }
 
     public function admin_assets( $hook ) {
@@ -332,6 +372,7 @@ final class Wedding_Camera {
         ] );
 
         ob_start(); ?>
+        <?php echo $this->inline_style_once(); ?>
         <div class="wcam-app" id="wcam-app">
             <section class="wcam-hero">
                 <p class="wcam-kicker"><?php echo esc_html( $settings['guest_eyebrow'] ); ?></p>
@@ -434,6 +475,7 @@ final class Wedding_Camera {
         ] );
 
         ob_start(); ?>
+        <?php echo $this->inline_style_once(); ?>
         <div class="wcam-wall" id="wcam-wall">
             <header class="wcam-wall-header"><p><?php echo esc_html( $atts['eyebrow'] ); ?></p><h1><?php echo esc_html( $atts['title'] ); ?></h1><span><?php echo esc_html( $atts['date'] ); ?></span></header>
             <div class="wcam-wall-topbar">
@@ -483,6 +525,7 @@ final class Wedding_Camera {
         wp_enqueue_script( 'wcam-share' );
 
         ob_start(); ?>
+        <?php echo $this->inline_style_once(); ?>
         <div class="wcam-qr-sheet">
             <?php for ( $i = 0; $i < $copies; $i++ ) : ?>
             <div class="wcam-qr-card">
