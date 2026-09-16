@@ -1,4 +1,4 @@
-# Wedding Camera v0.6.0
+# Wedding Camera v0.6.1
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -116,3 +116,7 @@ The Live Wall (`[wedding_photo_wall]`) has a new default layout: photos flow acr
 Each photo always scrolls in the same row (so photos don't visually jump between rows as new ones arrive), and a row only restarts its motion when a new photo actually lands in it — otherwise the scroll never stutters. Motion respects the "reduce motion" accessibility setting (falls back to a manually-scrollable strip). The Featured Photo spotlight overlay still works the same as before, on top of either layout.
 
 Also fixes a pre-existing bug: saving the main Settings & Frames form could silently erase the Share & QR page's camera URL and share card text, since that form didn't include those fields. Settings are now merged rather than replaced.
+
+## v0.6.1
+
+The Featured Photo moment no longer covers the screen. It's now a permanent, non-blocking banner ("✨ Featured Moment") pinned near the top of the Live Wall, above the scrolling rows/grid, that quietly crossfades to a new photo periodically instead of popping up as a full-screen overlay. The rest of the wall — and the guest scanning a QR code below it — is never covered or dimmed.

@@ -302,52 +302,45 @@
 .wcam-qr-card small { margin-top:4px; font-size:.72rem; opacity:.58; max-width:230px; overflow:hidden; text-overflow:ellipsis; }
 .wcam-wall-card { transition:opacity .35s ease, transform .35s ease; }
 .wcam-wall-card.is-leaving { opacity:0; transform:scale(.92); }
-.wcam-feature {
-  position:fixed;
-  inset:0;
-  z-index:99999;
-  display:grid;
-  place-items:center;
-  opacity:0;
-  transition:opacity .65s ease;
-  pointer-events:none;
+.wcam-spotlight {
+  max-width:1000px;
+  margin:0 auto 26px;
+  text-align:center;
 }
-.wcam-feature[hidden] { display:none; }
-.wcam-feature.is-visible { opacity:1; }
-.wcam-feature-backdrop {
-  position:absolute;
-  inset:0;
-  background:rgba(28,23,30,.84);
-  backdrop-filter:blur(18px);
+.wcam-spotlight[hidden] { display:none; }
+.wcam-spotlight-label {
+  text-transform:uppercase;
+  letter-spacing:.16em;
+  font-size:.78rem;
+  opacity:.72;
+  margin:0 0 10px;
 }
-.wcam-feature-card {
+.wcam-spotlight-media {
   position:relative;
-  z-index:1;
-  margin:0;
-  max-width:min(82vw,1200px);
-  max-height:84vh;
-  border-radius:26px;
+  display:inline-block;
+  border-radius:22px;
   overflow:hidden;
-  background:#fff;
-  box-shadow:0 30px 100px rgba(0,0,0,.38);
-  transform:scale(.94) translateY(16px);
-  transition:transform .65s cubic-bezier(.2,.8,.2,1);
+  background:#151218;
+  box-shadow:0 20px 60px rgba(47,42,50,.16);
+  transition:opacity .4s ease;
 }
-.wcam-feature.is-visible .wcam-feature-card { transform:none; }
-.wcam-feature-card img {
+.wcam-spotlight.is-fading .wcam-spotlight-media { opacity:0; }
+.wcam-spotlight-media img {
   display:block;
-  max-width:82vw;
-  max-height:76vh;
   width:auto;
   height:auto;
+  max-width:min(90vw,900px);
+  max-height:46vh;
   object-fit:contain;
-  background:#151218;
 }
-.wcam-feature-card figcaption {
-  padding:14px 20px 16px;
-  text-align:center;
-  font-size:clamp(1rem,1.5vw,1.35rem);
+.wcam-spotlight-media .wcam-photo-frame { object-fit:fill; }
+.wcam-spotlight-caption {
+  margin:14px 0 0;
+  font-size:1rem;
+  transition:opacity .4s ease;
 }
+.wcam-spotlight.is-fading .wcam-spotlight-caption { opacity:0; }
+.wcam-spotlight-caption:empty { display:none; }
 @media (max-width:700px) {
   .wcam-wall-topbar { align-items:flex-start; }
   .wcam-qr-card { max-width:58vw; }
@@ -377,9 +370,6 @@
 .wcam-my-card .wcam-photo-media { aspect-ratio:1/1; }
 .wcam-my-card .wcam-photo-image { width:100%; height:100%; object-fit:cover; }
 .wcam-wall-card .wcam-photo-media { width:100%; }
-.wcam-feature-media { position:relative; overflow:hidden; }
-.wcam-feature-media .wcam-photo-image { max-width:min(78vw,1100px); max-height:72vh; width:auto; height:auto; object-fit:contain; }
-.wcam-feature-media .wcam-photo-frame { object-fit:fill; }
 
 
 /* v0.5 live camera capture */

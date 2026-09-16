@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.6.0
+ * Version: 0.6.1
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.6.0' );
+define( 'WCAM_VERSION', '0.6.1' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -574,19 +574,17 @@ HTML;
                 </aside>
                 <?php endif; ?>
             </div>
+            <section id="wcam-spotlight" class="wcam-spotlight" hidden>
+                <p class="wcam-spotlight-label">✨ Featured Moment</p>
+                <div class="wcam-spotlight-media"><img id="wcam-spotlight-image" class="wcam-photo-image" alt="Featured wedding guest photo"><img id="wcam-spotlight-frame" class="wcam-photo-frame" alt="" hidden></div>
+                <p id="wcam-spotlight-caption" class="wcam-spotlight-caption"></p>
+            </section>
             <?php if ( $layout === 'rows' ) : ?>
             <div id="wcam-wall-rows" class="wcam-wall-rows"></div>
             <?php else : ?>
             <div id="wcam-wall-grid" class="wcam-wall-grid"></div>
             <?php endif; ?>
             <div id="wcam-wall-empty" class="wcam-wall-empty"><strong>The photo wall is waking up ✨</strong><span>Scan the wedding QR code to add the first photo.</span></div>
-            <div id="wcam-feature" class="wcam-feature" hidden aria-hidden="true">
-                <div class="wcam-feature-backdrop"></div>
-                <figure class="wcam-feature-card">
-                    <div class="wcam-feature-media"><img id="wcam-feature-image" class="wcam-photo-image" alt="Featured wedding guest photo"><img id="wcam-feature-frame" class="wcam-photo-frame" alt="" hidden></div>
-                    <figcaption id="wcam-feature-caption"></figcaption>
-                </figure>
-            </div>
         </div>
         <?php return ob_get_clean();
     }
@@ -760,7 +758,7 @@ HTML;
                     <label class="wcam-setting-row"><span>Number of scrolling rows</span><input type="number" min="2" max="5" name="wall_rows" value="<?php echo esc_attr( $s['wall_rows'] ); ?>"><small>Only used by the Scrolling rows layout.</small></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="show_captions" value="1" <?php checked( $s['show_captions'], '1' ); ?>><span><strong>Show captions</strong></span></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="show_guest_names" value="1" <?php checked( $s['show_guest_names'], '1' ); ?>><span><strong>Show guest names</strong></span></label>
-                    <label class="wcam-setting-toggle"><input type="checkbox" name="feature_enabled" value="1" <?php checked( $s['feature_enabled'], '1' ); ?>><span><strong>Featured photo moments</strong><small>Periodically enlarges one random live photo.</small></span></label>
+                    <label class="wcam-setting-toggle"><input type="checkbox" name="feature_enabled" value="1" <?php checked( $s['feature_enabled'], '1' ); ?>><span><strong>Featured photo spotlight</strong><small>Highlights one live photo in a banner at the top of the wall, changing periodically. Never covers the rest of the page.</small></span></label>
                     <label class="wcam-setting-row"><span>Refresh wall every</span><input type="number" min="3" max="60" name="refresh_seconds" value="<?php echo esc_attr( $s['refresh_seconds'] ); ?>"><small>seconds</small></label>
                     <label class="wcam-setting-row"><span>Feature a photo every</span><input type="number" min="10" max="300" name="feature_seconds" value="<?php echo esc_attr( $s['feature_seconds'] ); ?>"><small>seconds</small></label>
                 </section>

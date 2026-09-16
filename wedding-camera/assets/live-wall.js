@@ -3,10 +3,10 @@
   const rowsContainer = document.getElementById("wcam-wall-rows");
   const empty = document.getElementById("wcam-wall-empty");
   const count = document.getElementById("wcam-photo-count");
-  const feature = document.getElementById("wcam-feature");
-  const featureImg = document.getElementById("wcam-feature-image");
-  const featureFrame = document.getElementById("wcam-feature-frame");
-  const featureCaption = document.getElementById("wcam-feature-caption");
+  const spotlight = document.getElementById("wcam-spotlight");
+  const spotlightImg = document.getElementById("wcam-spotlight-image");
+  const spotlightFrame = document.getElementById("wcam-spotlight-frame");
+  const spotlightCaption = document.getElementById("wcam-spotlight-caption");
   if ((!grid && !rowsContainer) || typeof WeddingWall === "undefined") return;
 
   const known = new Set(); let currentPhotos = []; let lastFeatured = null;
@@ -79,20 +79,34 @@
   }
 
   function showFeature() {
-    if (!WeddingWall.featureEnabled || !feature || currentPhotos.length === 0 || !feature.hidden) return;
+    if (!WeddingWall.featureEnabled || !spotlight || currentPhotos.length === 0) return;
     let choices = currentPhotos.filter(p => String(p.id) !== String(lastFeatured)); if (!choices.length) choices = currentPhotos;
     const photo = choices[Math.floor(Math.random() * choices.length)]; if (!photo) return; lastFeatured = photo.id;
-    featureImg.src = photo.url || photo.thumbnail;
-    if (photo.frame_url) { featureFrame.src = photo.frame_url; featureFrame.hidden = false; } else { featureFrame.removeAttribute("src"); featureFrame.hidden = true; }
-    const text = textFor(photo); featureCaption.textContent = text; featureCaption.hidden = !text;
-    feature.hidden = false; feature.setAttribute("aria-hidden", "false"); requestAnimationFrame(() => feature.classList.add("is-visible"));
-    setTimeout(() => { feature.classList.remove("is-visible"); setTimeout(() => { feature.hidden = true; feature.setAttribute("aria-hidden", "true"); }, 700); }, 7000);
+
+    const applyPhoto = () => {
+      spotlightImg.src = photo.url || photo.thumbnail;
+      if (photo.frame_url) { spotlightFrame.src = photo.frame_url; spotlightFrame.hidden = false; } else { spotlightFrame.removeAttribute("src"); spotlightFrame.hidden = true; }
+      spotlightCaption.textContent = textFor(photo);
+    };
+
+    if (spotlight.hidden) {
+      // First photo: show immediately, no fade-out-then-in needed.
+      spotlight.hidden = false;
+      applyPhoto();
+      return;
+    }
+
+    // Already showing something: crossfade to the new photo instead of a
+    // blocking modal — the rest of the page is never covered or dimmed.
+    spotlight.classList.add("is-fading");
+    setTimeout(() => { applyPhoto(); spotlight.classList.remove("is-fading"); }, 400);
   }
 
   async function refresh() {
     try {
       const response = await fetch(`${WeddingWall.liveUrl}?_=${Date.now()}`, { cache: "no-store" }); if (!response.ok) return;
       const data = await response.json(); const photos = Array.isArray(data.photos) ? data.photos : []; currentPhotos = photos; if (count) count.textContent = String(photos.length);
+      if (spotlight && spotlight.hidden && photos.length) showFeature();
       if (rowsContainer) {
         renderRows(photos);
       } else if (grid) {
