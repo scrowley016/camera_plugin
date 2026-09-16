@@ -1,14 +1,14 @@
 <?php
 /**
  * Plugin Name: Wedding Camera
- * Description: Guest wedding photo uploads with opt-in live wall, reversible frames, and admin controls.
- * Version: 0.4.0
+ * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
+ * Version: 0.5.0
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.4.0' );
+define( 'WCAM_VERSION', '0.5.0' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -28,6 +28,7 @@ final class Wedding_Camera {
         add_action( 'rest_api_init', [ $this, 'register_routes' ] );
         add_shortcode( 'wedding_camera', [ $this, 'camera_shortcode' ] );
         add_shortcode( 'wedding_photo_wall', [ $this, 'wall_shortcode' ] );
+        add_shortcode( 'wedding_camera_qr', [ $this, 'qr_shortcode' ] );
 
         add_action( 'wp_enqueue_scripts', [ $this, 'register_assets' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
@@ -37,6 +38,7 @@ final class Wedding_Camera {
         add_action( 'admin_post_wcam_toggle_favorite', [ $this, 'admin_toggle_favorite' ] );
         add_action( 'admin_post_wcam_update_photo', [ $this, 'admin_update_photo' ] );
         add_action( 'admin_post_wcam_save_settings', [ $this, 'admin_save_settings' ] );
+        add_action( 'admin_post_wcam_save_share', [ $this, 'admin_save_share' ] );
     }
 
     private function default_settings() {
@@ -59,6 +61,9 @@ final class Wedding_Camera {
             'submit_button_text'   => 'Add to Our Album',
             'success_single_text'  => '✨ We got it! Your photo is in the wedding album.',
             'success_multi_text'   => '✨ We got them! {count} photos are in the wedding album.',
+            'camera_page_url'      => '',
+            'share_heading'        => 'Scan to Share Your Photos',
+            'share_subtext'        => 'Add your photos to our Live Wall in seconds.',
         ];
     }
 
@@ -95,10 +100,47 @@ final class Wedding_Camera {
         return null;
     }
 
+    /**
+     * Finds published pages/posts that contain a given shortcode tag, so the
+     * admin doesn't have to hand-type the camera page URL.
+     */
+    private function shortcode_pages( $tag ) {
+        $candidates = get_posts( [
+            'post_type'      => [ 'page', 'post' ],
+            'post_status'    => 'publish',
+            'posts_per_page' => 200,
+            'orderby'        => 'title',
+            'order'          => 'ASC',
+        ] );
+
+        $found = [];
+        foreach ( $candidates as $post ) {
+            if ( has_shortcode( (string) $post->post_content, $tag ) ) {
+                $found[] = [
+                    'id'    => $post->ID,
+                    'title' => get_the_title( $post ),
+                    'url'   => get_permalink( $post ),
+                ];
+            }
+        }
+        return $found;
+    }
+
+    private function camera_url() {
+        $settings = $this->settings();
+        if ( ! empty( $settings['camera_page_url'] ) ) {
+            return esc_url_raw( $settings['camera_page_url'] );
+        }
+        $pages = $this->shortcode_pages( 'wedding_camera' );
+        return ! empty( $pages ) ? $pages[0]['url'] : home_url( '/' );
+    }
+
     public function register_assets() {
         wp_register_style( 'wcam', WCAM_URL . 'assets/wedding-camera.css', [], WCAM_VERSION );
         wp_register_script( 'wcam-camera', WCAM_URL . 'assets/camera.js', [], WCAM_VERSION, true );
         wp_register_script( 'wcam-wall', WCAM_URL . 'assets/live-wall.js', [], WCAM_VERSION, true );
+        wp_register_script( 'wcam-qrlib', WCAM_URL . 'assets/qrcode.lib.js', [], WCAM_VERSION, true );
+        wp_register_script( 'wcam-share', WCAM_URL . 'assets/share-qr.js', [ 'wcam-qrlib' ], WCAM_VERSION, true );
     }
 
     public function admin_assets( $hook ) {
@@ -106,6 +148,12 @@ final class Wedding_Camera {
         wp_enqueue_media();
         wp_enqueue_script( 'wcam-admin', WCAM_URL . 'assets/admin.js', [ 'jquery' ], WCAM_VERSION, true );
         wp_enqueue_style( 'wcam-admin', WCAM_URL . 'assets/admin.css', [], WCAM_VERSION );
+
+        if ( strpos( (string) $hook, 'wedding-camera-share' ) !== false ) {
+            wp_register_script( 'wcam-qrlib', WCAM_URL . 'assets/qrcode.lib.js', [], WCAM_VERSION, true );
+            wp_register_script( 'wcam-share', WCAM_URL . 'assets/share-qr.js', [ 'wcam-qrlib' ], WCAM_VERSION, true );
+            wp_enqueue_script( 'wcam-share' );
+        }
     }
 
     public function register_routes() {
@@ -295,10 +343,30 @@ final class Wedding_Camera {
                 <div class="wcam-card wcam-closed"><h2>Thank you for sharing the magic ✨</h2><p>Photo uploads are currently closed.</p></div>
             <?php else : ?>
             <form class="wcam-card" id="wcam-upload-form">
-                <label class="wcam-upload-button">
-                    <span><?php echo esc_html( $settings['upload_button_text'] ); ?></span>
-                    <input id="wcam-files" type="file" name="photo" accept="image/*" multiple required>
-                </label>
+                <div class="wcam-capture-choices">
+                    <button type="button" id="wcam-open-camera" class="wcam-upload-button wcam-camera-trigger" hidden>
+                        <span>📷 Take a Photo</span>
+                    </button>
+                    <label class="wcam-upload-button wcam-gallery-trigger">
+                        <span><?php echo esc_html( $settings['upload_button_text'] ); ?></span>
+                        <input id="wcam-files" type="file" name="photo" accept="image/*" multiple required>
+                    </label>
+                </div>
+
+                <div id="wcam-camera-panel" class="wcam-camera-panel" hidden>
+                    <div class="wcam-camera-viewport">
+                        <video id="wcam-camera-video" playsinline autoplay muted></video>
+                        <canvas id="wcam-camera-canvas" hidden></canvas>
+                    </div>
+                    <p id="wcam-camera-error" class="wcam-camera-error" hidden></p>
+                    <div class="wcam-camera-controls">
+                        <button type="button" id="wcam-camera-switch" class="wcam-mini-button" hidden>🔄 Switch Camera</button>
+                        <button type="button" id="wcam-camera-shutter" class="wcam-shutter" aria-label="Take photo"></button>
+                        <button type="button" id="wcam-camera-close" class="wcam-mini-button">Close</button>
+                    </div>
+                    <div id="wcam-camera-shots" class="wcam-camera-shots"></div>
+                    <button type="button" id="wcam-camera-done" class="wcam-submit" hidden>Use These Photos</button>
+                </div>
 
                 <div id="wcam-preview" class="wcam-preview" hidden></div>
 
@@ -390,10 +458,52 @@ final class Wedding_Camera {
         <?php return ob_get_clean();
     }
 
+    /**
+     * Printable / on-screen QR share card. Use `copies` to print a sheet of
+     * table cards (e.g. copies="6") and `url` to point at any page other
+     * than the auto-detected camera page.
+     */
+    public function qr_shortcode( $atts = [] ) {
+        $settings = $this->settings();
+        $atts = shortcode_atts( [
+            'url'     => '',
+            'heading' => $settings['share_heading'],
+            'subtext' => $settings['share_subtext'],
+            'eyebrow' => $settings['guest_eyebrow'],
+            'copies'  => 1,
+            'size'    => 220,
+        ], $atts, 'wedding_camera_qr' );
+
+        $url    = $atts['url'] ? esc_url_raw( $atts['url'] ) : $this->camera_url();
+        $copies = max( 1, min( 12, absint( $atts['copies'] ) ) );
+        $size   = max( 120, min( 480, absint( $atts['size'] ) ) );
+
+        wp_enqueue_style( 'wcam' );
+        wp_enqueue_script( 'wcam-qrlib' );
+        wp_enqueue_script( 'wcam-share' );
+
+        ob_start(); ?>
+        <div class="wcam-qr-sheet">
+            <?php for ( $i = 0; $i < $copies; $i++ ) : ?>
+            <div class="wcam-qr-card">
+                <p class="wcam-kicker"><?php echo esc_html( $atts['eyebrow'] ); ?></p>
+                <h2><?php echo esc_html( $atts['heading'] ); ?></h2>
+                <div class="wcam-qr-canvas-wrap">
+                    <canvas class="wcam-qr-canvas" data-url="<?php echo esc_attr( $url ); ?>" width="<?php echo esc_attr( $size ); ?>" height="<?php echo esc_attr( $size ); ?>"></canvas>
+                </div>
+                <p class="wcam-qr-subtext"><?php echo esc_html( $atts['subtext'] ); ?></p>
+                <p class="wcam-qr-link"><?php echo esc_html( preg_replace( '#^https?://#', '', $url ) ); ?></p>
+            </div>
+            <?php endfor; ?>
+        </div>
+        <?php return ob_get_clean();
+    }
+
     public function admin_menu() {
         add_menu_page( 'Wedding Camera', 'Wedding Camera', 'upload_files', 'wedding-camera', [ $this, 'admin_page' ], 'dashicons-camera-alt', 26 );
         add_submenu_page( 'wedding-camera', 'Photos', 'Photos', 'upload_files', 'wedding-camera', [ $this, 'admin_page' ] );
         add_submenu_page( 'wedding-camera', 'Settings & Frames', 'Settings & Frames', 'manage_options', 'wedding-camera-settings', [ $this, 'settings_page' ] );
+        add_submenu_page( 'wedding-camera', 'Share & QR', 'Share & QR', 'manage_options', 'wedding-camera-share', [ $this, 'share_page' ] );
     }
 
     private function guest_photos() {
@@ -547,6 +657,65 @@ final class Wedding_Camera {
         <?php
     }
 
+    public function share_page() {
+        if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Not allowed.' );
+        $s     = $this->settings();
+        $pages = $this->shortcode_pages( 'wedding_camera' );
+        $url   = $this->camera_url();
+        ?>
+        <div class="wrap wcam-settings-wrap wcam-share-wrap">
+            <h1>Wedding Camera — Share & QR</h1>
+            <?php if ( isset( $_GET['saved'] ) ) : ?><div class="notice notice-success is-dismissible"><p>Wedding Camera settings saved.</p></div><?php endif; ?>
+            <p>Get guests to the camera page with a QR code they can scan, or an NFC tag they can tap.</p>
+
+            <div class="wcam-share-columns">
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="wcam-settings-card">
+                    <input type="hidden" name="action" value="wcam_save_share"><?php wp_nonce_field( 'wcam_save_share' ); ?>
+
+                    <h2>Camera Page</h2>
+                    <?php if ( $pages ) : ?>
+                        <p>Pages found using <code>[wedding_camera]</code>:</p>
+                        <ul class="wcam-detected-pages">
+                            <?php foreach ( $pages as $p ) : ?>
+                            <li><strong><?php echo esc_html( $p['title'] ); ?></strong> — <code><?php echo esc_html( $p['url'] ); ?></code></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else : ?>
+                        <p>No published page with <code>[wedding_camera]</code> was found yet. Add that shortcode to a page, or set the URL manually below.</p>
+                    <?php endif; ?>
+                    <label class="wcam-setting-row"><span>Camera page URL</span><input type="url" class="regular-text" name="camera_page_url" value="<?php echo esc_attr( $s['camera_page_url'] ); ?>" placeholder="<?php echo esc_attr( $pages ? $pages[0]['url'] : home_url( '/' ) ); ?>"></label>
+                    <small>Leave blank to auto-use the first detected page above.</small>
+
+                    <h2>Share Card Text</h2>
+                    <label class="wcam-setting-row"><span>Heading</span><input type="text" class="regular-text" name="share_heading" maxlength="120" value="<?php echo esc_attr( $s['share_heading'] ); ?>"></label>
+                    <label class="wcam-setting-row"><span>Subtext</span><textarea class="large-text" rows="2" name="share_subtext" maxlength="200"><?php echo esc_textarea( $s['share_subtext'] ); ?></textarea></label>
+
+                    <?php submit_button( 'Save' ); ?>
+                </form>
+
+                <div class="wcam-settings-card wcam-share-preview">
+                    <h2>Preview & Download</h2>
+                    <div class="wcam-qr-canvas-wrap">
+                        <canvas id="wcam-admin-qr-canvas" data-url="<?php echo esc_attr( $url ); ?>" width="240" height="240"></canvas>
+                    </div>
+                    <p class="wcam-qr-link"><code id="wcam-admin-qr-url"><?php echo esc_html( $url ); ?></code></p>
+                    <div class="wcam-share-actions">
+                        <button type="button" class="button" id="wcam-copy-link">Copy Link</button>
+                        <button type="button" class="button button-primary" id="wcam-download-qr">Download QR (PNG)</button>
+                    </div>
+                    <p><strong>Tip:</strong> Add <code>[wedding_camera_qr]</code> to any page for a printable share card, or <code>[wedding_camera_qr copies="6"]</code> to print a sheet of table cards.</p>
+
+                    <h2>NFC Tags <small>(optional)</small></h2>
+                    <p id="wcam-nfc-support-note"></p>
+                    <button type="button" class="button" id="wcam-nfc-write" hidden>📲 Write NFC Tag</button>
+                    <p id="wcam-nfc-status" aria-live="polite"></p>
+                    <p class="wcam-nfc-fallback">No built-in NFC writer on this device? Use a free app like "NFC Tools" to write this same link to your tags:<br><code><?php echo esc_html( $url ); ?></code></p>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+
     public function admin_save_settings() {
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Not allowed.' );
         check_admin_referer( 'wcam_save_settings' );
@@ -584,6 +753,24 @@ final class Wedding_Camera {
         update_option( self::OPTION_FRAMES, $frames, false );
 
         wp_safe_redirect( admin_url( 'admin.php?page=wedding-camera-settings&saved=1' ) );
+        exit;
+    }
+
+    /**
+     * Saves just the Share & QR fields, merged into existing settings so this
+     * smaller form never clobbers the toggles/text set on the main page.
+     */
+    public function admin_save_share() {
+        if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Not allowed.' );
+        check_admin_referer( 'wcam_save_share' );
+
+        $settings = $this->settings();
+        $settings['camera_page_url'] = isset( $_POST['camera_page_url'] ) ? esc_url_raw( wp_unslash( $_POST['camera_page_url'] ) ) : '';
+        $settings['share_heading']   = isset( $_POST['share_heading'] ) ? sanitize_text_field( wp_unslash( $_POST['share_heading'] ) ) : $settings['share_heading'];
+        $settings['share_subtext']   = isset( $_POST['share_subtext'] ) ? sanitize_textarea_field( wp_unslash( $_POST['share_subtext'] ) ) : $settings['share_subtext'];
+        update_option( self::OPTION_SETTINGS, $settings, false );
+
+        wp_safe_redirect( admin_url( 'admin.php?page=wedding-camera-share&saved=1' ) );
         exit;
     }
 

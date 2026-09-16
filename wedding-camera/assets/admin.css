@@ -1,1 +1,167 @@
-.wcam-admin-filters{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 22px}.wcam-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px}.wcam-admin-card{background:#fff;border:1px solid #dcdcde;border-radius:14px;overflow:hidden}.wcam-admin-image-wrap{position:relative;background:#f3f3f3}.wcam-admin-image-wrap>img:not(.wcam-admin-frame){width:100%;aspect-ratio:1/1;object-fit:cover;display:block}.wcam-admin-frame{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none}.wcam-admin-body{padding:14px}.wcam-admin-body input.regular-text,.wcam-admin-body textarea,.wcam-admin-body select{width:100%}.wcam-admin-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.wcam-admin-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.wcam-badge{font-size:10px;font-weight:800;letter-spacing:.08em;border-radius:999px;padding:4px 7px;background:#eee}.wcam-badge.is-live{background:#dff3e5;color:#175b2c}.wcam-settings-wrap{max-width:980px}.wcam-settings-card{background:#fff;border:1px solid #dcdcde;border-radius:14px;padding:22px;margin:20px 0}.wcam-setting-toggle{display:flex;gap:12px;align-items:flex-start;padding:11px 0}.wcam-setting-toggle span,.wcam-setting-toggle small{display:block}.wcam-setting-toggle small{color:#646970;margin-top:3px}.wcam-setting-row{display:flex;align-items:center;gap:10px;padding:10px 0;flex-wrap:wrap}.wcam-setting-row>span{min-width:180px;font-weight:600}.wcam-setting-row input[type=number]{width:90px}.wcam-frame-rows{display:grid;gap:10px;margin:16px 0}.wcam-frame-row{display:grid;grid-template-columns:80px minmax(180px,1fr) auto auto;gap:10px;align-items:center;border:1px solid #dcdcde;border-radius:12px;padding:10px}.wcam-frame-preview{width:80px;height:80px;border-radius:8px;background:#eee;display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center;font-size:11px;color:#666}.wcam-frame-preview img{width:100%;height:100%;object-fit:contain}.wcam-frame-label{width:100%}@media(max-width:700px){.wcam-frame-row{grid-template-columns:70px 1fr}.wcam-frame-row .button,.wcam-frame-row .button-link-delete{grid-column:2}}
+/* Wedding Camera — wp-admin styling for the Photos, Settings & Frames, and Share & QR screens. */
+
+:root {
+  --wcam-a-ink: #2f2a32;
+  --wcam-a-cream: #fbf7ef;
+  --wcam-a-sage: #7e9278;
+  --wcam-a-purple: #6d517c;
+  --wcam-a-line: #e3ddea;
+}
+
+.wcam-admin-wrap h1,
+.wcam-settings-wrap h1 { margin-bottom:4px; }
+
+/* Photos screen */
+.wcam-admin-filters {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:16px 0 20px;
+}
+
+.wcam-admin-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+  gap:16px;
+}
+
+.wcam-admin-card {
+  background:#fff;
+  border:1px solid var(--wcam-a-line);
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 2px 8px rgba(47,42,50,.06);
+}
+
+.wcam-admin-image-wrap { position:relative; background:#f3f0f5; }
+.wcam-admin-image-wrap img { display:block; width:100%; height:200px; object-fit:cover; }
+.wcam-admin-frame { position:absolute; inset:0; width:100%; height:100%; object-fit:fill; pointer-events:none; }
+
+.wcam-admin-badges { display:flex; gap:6px; padding:10px 12px 0; }
+.wcam-badge {
+  display:inline-block;
+  font-size:.72rem;
+  font-weight:700;
+  letter-spacing:.04em;
+  padding:3px 9px;
+  border-radius:999px;
+  background:#efeaf1;
+  color:var(--wcam-a-ink);
+}
+.wcam-badge.is-live { background:var(--wcam-a-sage); color:#fff; }
+
+.wcam-admin-body { padding:10px 12px 14px; }
+.wcam-admin-body p { margin:8px 0; }
+.wcam-admin-body input.regular-text,
+.wcam-admin-body textarea,
+.wcam-admin-body select { width:100%; box-sizing:border-box; }
+
+.wcam-admin-actions {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:10px;
+}
+
+/* Settings & Frames / Share & QR screens */
+.wcam-settings-card {
+  background:#fff;
+  border:1px solid var(--wcam-a-line);
+  border-radius:12px;
+  padding:18px 22px;
+  margin:18px 0;
+  max-width:760px;
+}
+.wcam-settings-card h2 { margin-top:0; }
+
+.wcam-setting-row {
+  display:block;
+  margin:14px 0;
+}
+.wcam-setting-row > span {
+  display:block;
+  font-weight:600;
+  margin-bottom:5px;
+}
+.wcam-setting-row small { display:block; margin-top:4px; opacity:.7; }
+
+.wcam-setting-toggle {
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:12px;
+  margin:10px 0;
+  border:1px solid var(--wcam-a-line);
+  border-radius:10px;
+  background:var(--wcam-a-cream);
+}
+.wcam-setting-toggle input { margin-top:4px; }
+.wcam-setting-toggle strong { display:block; }
+.wcam-setting-toggle small { display:block; margin-top:2px; opacity:.72; }
+
+.wcam-frame-rows { display:flex; flex-direction:column; gap:10px; margin:14px 0; }
+.wcam-frame-row {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:10px;
+  border:1px solid var(--wcam-a-line);
+  border-radius:10px;
+  background:#fff;
+}
+.wcam-frame-preview {
+  width:56px;
+  height:56px;
+  flex:0 0 auto;
+  border-radius:8px;
+  background:#f3f0f5;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  font-size:.68rem;
+  text-align:center;
+  color:#888;
+}
+.wcam-frame-preview img { width:100%; height:100%; object-fit:contain; }
+.wcam-frame-label { flex:1 1 auto; min-width:120px; }
+
+/* Share & QR screen */
+.wcam-share-columns {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:20px;
+  align-items:start;
+}
+@media (max-width:960px) {
+  .wcam-share-columns { grid-template-columns:1fr; }
+}
+
+.wcam-detected-pages { margin:8px 0 14px; padding-left:20px; }
+.wcam-detected-pages li { margin-bottom:4px; }
+
+.wcam-share-preview { text-align:center; }
+.wcam-share-preview .wcam-qr-canvas-wrap {
+  display:inline-flex;
+  padding:12px;
+  background:#fff;
+  border:1px solid var(--wcam-a-line);
+  border-radius:12px;
+  margin:6px 0 12px;
+}
+.wcam-share-preview .wcam-qr-link {
+  word-break:break-all;
+  font-size:.85rem;
+  opacity:.75;
+  margin:0 0 14px;
+}
+.wcam-share-actions {
+  display:flex;
+  justify-content:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:16px;
+}
+.wcam-share-preview h2:not(:first-child) { margin-top:26px; border-top:1px solid var(--wcam-a-line); padding-top:18px; }
+.wcam-nfc-fallback { font-size:.85rem; opacity:.8; text-align:left; }
+#wcam-nfc-status { min-height:1.4em; font-weight:600; }

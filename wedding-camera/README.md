@@ -1,4 +1,4 @@
-# Wedding Camera v0.4
+# Wedding Camera v0.5
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -65,3 +65,26 @@ Because guests may upload portrait, landscape, and square photos, decorative edg
 ## v0.4
 
 Adds editable guest camera-page text in Wedding Camera → Settings & Frames, including the heading, intro, upload button, Live Wall checkbox text, submit button, and success messages.
+
+## v0.5
+
+### Live in-browser camera
+The `[wedding_camera]` page now has a "📷 Take a Photo" button next to "Choose Photos". It opens a live camera preview (front/back switch on phones, webcam on laptops), lets guests snap multiple shots in a row, remove any before continuing, and adds them straight into the same upload queue as gallery-picked files — same name/caption/frame/Live Wall options apply to all of them. If a guest's browser or device won't allow camera access, the button hides itself automatically and gallery upload still works exactly as before.
+
+### Share & QR
+New page: WordPress Admin → Wedding Camera → Share & QR.
+- Auto-detects which published page uses `[wedding_camera]` and builds its link, or set a URL by hand.
+- Live QR preview, one-click "Copy Link", and "Download QR (PNG)" for print shops, invitations, or your own signage.
+- Editable heading/subtext for the on-page share card.
+- **NFC tags:** on phones/browsers that support Web NFC (Chrome for Android), a "Write NFC Tag" button writes the camera link straight to a blank tag — just tap it to a tag and hold. Everywhere else, copy the link shown and use any NFC-tag-writing app (e.g. "NFC Tools") instead.
+
+### `[wedding_camera_qr]` shortcode
+Drop this on any page or post for a printable/scannable share card guests can see on-screen, or that you print and cut out for tables, favors, or a welcome sign:
+```
+[wedding_camera_qr]
+[wedding_camera_qr heading="Scan Me!" subtext="Send us your favorite moment" copies="6"]
+```
+`copies` (1–12) repeats the card so you can print a full sheet of matching table cards at once — the shortcode's page includes print-friendly CSS, so File → Print produces clean, cut-ready cards with no browser chrome.
+`url`, `eyebrow`, and `size` (QR pixel size) are also available as optional attributes.
+
+QR codes are generated entirely in the guest's/admin's browser (via a bundled, MIT-licensed encoder) — no third-party services or network calls involved.
