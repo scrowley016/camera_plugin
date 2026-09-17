@@ -1,4 +1,4 @@
-# Wedding Camera v0.6.1
+# Wedding Camera v0.7.0
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -120,3 +120,26 @@ Also fixes a pre-existing bug: saving the main Settings & Frames form could sile
 ## v0.6.1
 
 The Featured Photo moment no longer covers the screen. It's now a permanent, non-blocking banner ("✨ Featured Moment") pinned near the top of the Live Wall, above the scrolling rows/grid, that quietly crossfades to a new photo periodically instead of popping up as a full-screen overlay. The rest of the wall — and the guest scanning a QR code below it — is never covered or dimmed.
+
+## v0.7.0
+
+### Guest camera page is now a step-by-step wizard
+Rebuilt `[wedding_camera]` as a small app-like flow instead of one long form:
+1. **Name** — one input, then Continue.
+2. **Add Photos** — "📷 Take Photos" or the gallery/file picker.
+3. **Camera** (if chosen) — a larger, more immersive live camera screen (front/back switch, multi-shot, retake), unchanged capability-wise but now its own full step.
+4. **Review** — thumbnails of everything selected/captured, an optional frame picker, and an optional per-photo caption field on each one. Leave captions blank and just tap upload — nothing is required. A "+ Add More Photos" button loops back to step 2 without losing what's already been picked.
+
+### Every upload goes to the Live Wall
+Removed the "Add to the Live Photo Wall" checkbox — there's no reason for guests to opt out at upload time. Every guest photo now appears on the wall automatically. An admin can still hide any individual photo afterward from Wedding Camera → Photos, and a guest can still remove their own photo from the wall later via "My Photos" on the camera page.
+
+### Live Wall photos are shuffled, not just newest-first
+Both wall layouts (scrolling rows and classic grid) now mix photos into a randomized order instead of strict recency, so it doesn't just read top-to-bottom as "most recent first." Existing photos never jump around mid-view — new arrivals are the only thing that get shuffled in.
+
+### Faster uploads
+Uploading many photos (e.g. 12 at once) was slow for two reasons, both fixed:
+- Photos now upload **3 at a time in parallel** instead of one at a time.
+- Each photo is **resized/compressed in the guest's browser** before it's sent (capped at 2400px on the long edge, ~86% JPEG quality — plenty sharp for the wall and prints, dramatically smaller than a raw phone photo) — a huge win for both upload time and the server's own image-processing time. The server additionally skips generating any image size the plugin doesn't actually use.
+
+### Live Wall motion on mobile
+If the scrolling rows still don't appear to move on a specific phone, the most common cause is that phone's **Reduce Motion** accessibility setting (Settings → Accessibility → Motion on iOS) — the plugin deliberately respects it and falls back to a manually-scrollable strip, since that's the right thing to do for anyone who's turned it on for a real reason. Turning it off on that device confirms whether that's the cause. Independently, this release also tightens the default scroll speed and adds a few mobile-Safari-specific CSS properties for reliability.

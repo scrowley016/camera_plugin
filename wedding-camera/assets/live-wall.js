@@ -38,6 +38,15 @@
     return card;
   }
 
+  function shuffle(list) {
+    const arr = list.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
   // Stable per-photo row assignment (based on the photo's own id, not its
   // position in the list) so a photo always lands in the same scrolling row
   // and doesn't jump between rows as new photos arrive ahead of it.
@@ -50,10 +59,13 @@
   function renderRows(photos) {
     const rowCount = Math.max(2, Math.min(5, Number(WeddingWall.rows) || 3));
     const buckets = bucketByRow(photos, rowCount);
-    buckets.forEach((rowPhotos, index) => {
-      const key = rowPhotos.map(p => p.id).join(",");
+    buckets.forEach((bucketPhotos, index) => {
+      // The "did this row change" key ignores order, so shuffling below never
+      // looks like a change and never restarts a row that's already correct.
+      const key = bucketPhotos.map(p => p.id).slice().sort().join(",");
       if (rowKeys[index] === key) return; // nothing changed for this row, leave its animation running
       rowKeys[index] = key;
+      const rowPhotos = shuffle(bucketPhotos);
 
       let rowEl = rowsContainer.querySelector(`.wcam-wall-row[data-row="${index}"]`);
       if (!rowEl) {
@@ -74,7 +86,7 @@
       // Duplicate the row's content once so a 0%->-50% translateX loops seamlessly.
       rowPhotos.forEach(photo => track.appendChild(makeRowCard(photo)));
       rowPhotos.forEach(photo => track.appendChild(makeRowCard(photo)));
-      track.style.animationDuration = `${Math.max(18, rowPhotos.length * 5)}s`;
+      track.style.animationDuration = `${Math.max(14, rowPhotos.length * 4)}s`;
     });
   }
 
@@ -112,7 +124,16 @@
       } else if (grid) {
         const liveIds = new Set(photos.map(p => String(p.id)));
         grid.querySelectorAll("[data-id]").forEach(el => { if (!liveIds.has(String(el.dataset.id))) { known.delete(String(el.dataset.id)); el.classList.add("is-leaving"); setTimeout(() => el.remove(), 350); } });
-        photos.slice().reverse().forEach(photo => { const id = String(photo.id); if (!known.has(id)) { known.add(id); grid.prepend(makeCard(photo)); } });
+        shuffle(photos).forEach(photo => {
+          const id = String(photo.id);
+          if (known.has(id)) return;
+          known.add(id);
+          // Insert at a random position (rather than always at the front) so
+          // the wall reads as shuffled instead of strictly newest-first.
+          const children = grid.children;
+          const at = children.length ? Math.floor(Math.random() * (children.length + 1)) : 0;
+          grid.insertBefore(makeCard(photo), children[at] || null);
+        });
       }
       empty.hidden = photos.length > 0;
     } catch (_) {}
