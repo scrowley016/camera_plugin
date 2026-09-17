@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.7.1
+ * Version: 0.7.2
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.7.1' );
+define( 'WCAM_VERSION', '0.7.2' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -487,6 +487,7 @@ HTML;
                         <button type="button" id="wcam-camera-close" class="wcam-mini-button">Close</button>
                     </div>
                     <div id="wcam-camera-shots" class="wcam-camera-shots"></div>
+                    <button type="button" id="wcam-camera-save" class="wcam-mini-button wcam-save-photos" hidden>💾 Save to Photos (in case of issues)</button>
                     <button type="button" id="wcam-camera-done" class="wcam-submit" hidden>Use These Photos</button>
                 </section>
 

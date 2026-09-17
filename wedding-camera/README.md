@@ -1,4 +1,4 @@
-# Wedding Camera v0.7.1
+# Wedding Camera v0.7.2
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -154,3 +154,9 @@ If the scrolling rows still don't appear to move on a specific phone, the most c
 - **Frames can now be assigned per photo, by drag-and-drop (or tap-then-tap on a small screen).** The review step shows a row of frame chips above the photo grid — drag one onto any photo, or tap a frame then tap a photo to apply it. Each photo can have its own frame or none at all.
 - **Fixed frames rendering inconsistently across the site** — the actual root cause of "frames seem a little off." Several places had a generic image-sizing CSS rule that unintentionally also applied to the frame overlay itself, silently cropping or shrinking the frame art differently in different contexts (My Photos, the Live Wall, the admin Photos screen) even though it looked correct in the guest's own review screen. Every framed photo is now consistently cropped into the same square before the frame is applied, everywhere the plugin shows one.
 - **Exact Canva frame size: 1080 × 1080 px, square, transparent PNG.** Every framed photo across the whole plugin is now cropped into this exact square before the frame is applied, so a frame built at this size will line up correctly everywhere (guest review screen, Live Wall, My Photos, admin). Keep important artwork within about the outer 8% border, since the longer side of non-square photos gets trimmed slightly to fit — same as most social apps.
+
+## v0.7.2
+
+- **Skips the name step automatically** once a name is saved on that device — a guest doing several upload batches over the course of the wedding now lands straight on "Add Photos" after the first time.
+- **Bigger, more immersive live camera screen** — the viewfinder now uses noticeably more of the screen (the wizard card's own side padding shrinks specifically while the camera step is active, and the viewport's height cap was raised).
+- **"💾 Save to Photos" safety net for the in-app camera.** After taking photos with the built-in camera (not needed for gallery photos — those are already in their camera roll), a new button saves them straight to the guest's own device before upload even starts, via the phone's native share sheet ("Save Image(s)" → Photos on iPhone). That way a network hiccup or site issue during upload can never cost a guest their actual photos — they already have a copy.

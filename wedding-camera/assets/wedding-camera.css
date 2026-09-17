@@ -444,18 +444,22 @@
   background:white;
   border:1px solid var(--wcam-line);
   border-radius:22px;
-  padding:16px;
+  padding:8px;
   margin-bottom:18px;
 }
 .wcam-camera-viewport {
   position:relative;
   width:100%;
   aspect-ratio:9/16;
-  max-height:78vh;
+  max-height:88vh;
   border-radius:16px;
   overflow:hidden;
   background:#151218;
 }
+/* Give the camera step more width to work with by shrinking the wizard's
+   own side padding while it's the active step — a bigger, more app-like
+   viewfinder instead of a small preview squeezed inside the card's margins. */
+.wcam-wizard:has(#wcam-step-camera:not([hidden])) { padding-left:10px; padding-right:10px; }
 .wcam-camera-viewport video {
   width:100%;
   height:100%;
@@ -515,7 +519,15 @@
   line-height:1;
   cursor:pointer;
 }
-.wcam-camera-panel #wcam-camera-done { margin-top:14px; }
+.wcam-save-photos {
+  width:100%;
+  margin-top:14px;
+  border-radius:14px;
+  border:1px dashed var(--wcam-line);
+  background:var(--wcam-cream);
+  font-size:.88rem;
+}
+.wcam-camera-panel #wcam-camera-done { margin-top:10px; }
 
 @media (max-width:600px) {
   .wcam-capture-choices { flex-direction:column; }

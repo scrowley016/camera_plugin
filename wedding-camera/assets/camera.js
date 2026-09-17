@@ -71,6 +71,7 @@
   const nameInput = document.getElementById("wcam-name");
   if (nameInput) {
     nameInput.value = getSavedName();
+    if (nameInput.value) goToStep("method"); // already have it from a previous visit — go straight to photos
     nameInput.addEventListener("input", () => saveName(nameInput.value));
     nameInput.addEventListener("keydown", event => {
       if (event.key === "Enter") { event.preventDefault(); goToStep("method"); }
@@ -224,6 +225,7 @@
   const cameraCloseBtn = document.getElementById("wcam-camera-close");
   const cameraShotsEl = document.getElementById("wcam-camera-shots");
   const cameraDoneBtn = document.getElementById("wcam-camera-done");
+  const cameraSaveBtn = document.getElementById("wcam-camera-save");
 
   let cameraStream = null;
   let facingMode = "environment";
@@ -282,7 +284,37 @@
         cameraShotsEl.appendChild(item);
       });
       cameraDoneBtn.hidden = cameraShots.length === 0;
+      if (cameraSaveBtn) cameraSaveBtn.hidden = cameraShots.length === 0;
     }
+
+    // Saves the just-taken photos to the guest's own device (Photos/camera
+    // roll on a phone, via the native share sheet) BEFORE upload, so a
+    // network or site hiccup during upload can never lose the actual shots.
+    async function saveShotsToPhotos() {
+      if (!cameraShots.length) return;
+      const files = cameraShots.map((shot, index) => new File([shot.blob], `wedding-photo-${Date.now()}-${index}.jpg`, { type: "image/jpeg" }));
+      try {
+        if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
+          await navigator.share({ files });
+        } else {
+          files.forEach(file => {
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(file);
+            link.download = file.name;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+          });
+        }
+      } catch (err) {
+        if (err && err.name !== "AbortError") {
+          alert("Could not save the photos to your device. Your photos are still fine here — you can try again, or just continue.");
+        }
+      }
+    }
+
+    cameraSaveBtn?.addEventListener("click", saveShotsToPhotos);
 
     cameraDoneBtn?.addEventListener("click", () => {
       if (!cameraShots.length) return;
