@@ -1,12 +1,14 @@
 (() => {
-  const form = document.getElementById("wcam-upload-form");
   const mySection = document.getElementById("wcam-my-photos");
   const myGrid = document.getElementById("wcam-my-photo-grid");
   const storageKey = "weddingCameraUploadsV1";
+  const nameStorageKey = "weddingCameraGuestNameV1";
   if (typeof WeddingCamera === "undefined") return;
 
   const getMine = () => { try { return JSON.parse(localStorage.getItem(storageKey) || "[]"); } catch { return []; } };
   const saveMine = items => localStorage.setItem(storageKey, JSON.stringify(items));
+  const getSavedName = () => { try { return localStorage.getItem(nameStorageKey) || ""; } catch { return ""; } };
+  const saveName = value => { try { localStorage.setItem(nameStorageKey, value); } catch {} };
 
   function framedMedia(imageUrl, frameUrl, alt = "") {
     const wrap = document.createElement("div");
@@ -53,40 +55,168 @@
   }
 
   renderMine();
-  if (!form) return;
+
+  const wizard = document.getElementById("wcam-wizard");
+  if (!wizard) return;
+
+  // ---- Step navigation ----
+  const steps = wizard.querySelectorAll(".wcam-step");
+  function goToStep(name) {
+    steps.forEach(step => { step.hidden = step.dataset.step !== name; });
+  }
+  wizard.querySelectorAll("[data-goto]").forEach(button => {
+    button.addEventListener("click", () => goToStep(button.dataset.goto));
+  });
+
+  const nameInput = document.getElementById("wcam-name");
+  if (nameInput) {
+    nameInput.value = getSavedName();
+    if (nameInput.value) goToStep("method"); // already have it from a previous visit — go straight to photos
+    nameInput.addEventListener("input", () => saveName(nameInput.value));
+    nameInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); goToStep("method"); }
+    });
+  }
 
   const filesInput = document.getElementById("wcam-files");
-  const preview = document.getElementById("wcam-preview");
+  const reviewGrid = document.getElementById("wcam-review-grid");
   const status = document.getElementById("wcam-status");
-  const submit = form.querySelector(".wcam-submit");
-  let objectUrls = [];
+  const finalSubmit = document.getElementById("wcam-final-submit");
+  const addMoreBtn = document.getElementById("wcam-add-more");
 
-  function selectedFrame() {
-    const input = form.querySelector('input[name="wcam_frame"]:checked');
-    return { id: input ? Number(input.value || 0) : 0, url: input?.dataset?.frameUrl || "" };
+  let items = []; // { blob, name, previewUrl, caption, frameId, frameUrl }
+
+  const frameLabelById = new Map((WeddingCamera.frames || []).map(f => [Number(f.id), f.label]));
+  function frameLabel(frameId) { return frameId ? (frameLabelById.get(Number(frameId)) || "Frame") : "No Frame"; }
+
+  function addItems(newItems) {
+    items = items.concat(newItems.map(item => ({ frameId: 0, frameUrl: "", ...item })));
   }
 
-  function renderPreview() {
-    objectUrls.forEach(URL.revokeObjectURL); objectUrls = [];
-    preview.innerHTML = "";
-    const files = Array.from(filesInput.files || []); preview.hidden = files.length === 0;
-    const frame = selectedFrame();
-    files.slice(0, 12).forEach(file => {
-      const url = URL.createObjectURL(file); objectUrls.push(url);
-      preview.appendChild(framedMedia(url, frame.url, "Selected photo preview"));
+  function renderReview() {
+    if (!reviewGrid) return;
+    reviewGrid.innerHTML = "";
+    items.forEach((item, index) => {
+      const card = document.createElement("div"); card.className = "wcam-review-card";
+      card.dataset.index = String(index);
+      card.appendChild(framedMedia(item.previewUrl, item.frameUrl, "Selected photo preview"));
+      const badge = document.createElement("span");
+      badge.className = "wcam-review-frame-badge";
+      badge.textContent = frameLabel(item.frameId);
+      card.appendChild(badge);
+      const caption = document.createElement("input");
+      caption.type = "text"; caption.maxLength = 240; caption.placeholder = "Add a caption (optional)";
+      caption.className = "wcam-review-caption";
+      caption.value = item.caption;
+      caption.addEventListener("input", () => { item.caption = caption.value; });
+      card.appendChild(caption);
+      const remove = document.createElement("button");
+      remove.type = "button"; remove.className = "wcam-review-remove"; remove.setAttribute("aria-label", "Remove this photo"); remove.textContent = "×";
+      remove.addEventListener("click", event => {
+        event.stopPropagation();
+        URL.revokeObjectURL(item.previewUrl);
+        items.splice(index, 1);
+        renderReview();
+      });
+      card.appendChild(remove);
+      // Tap-to-assign fallback: if a frame chip is "active" (tapped, not
+      // dragged), tapping a photo applies it — friendlier than dragging on
+      // a small screen.
+      card.addEventListener("click", () => {
+        if (!activeChipFrame) return;
+        item.frameId = activeChipFrame.id;
+        item.frameUrl = activeChipFrame.url;
+        renderReview();
+      });
+      reviewGrid.appendChild(card);
     });
-    if (files.length > 12) { const more = document.createElement("div"); more.className = "wcam-more"; more.textContent = `+${files.length - 12}`; preview.appendChild(more); }
   }
 
-  filesInput.addEventListener("change", renderPreview);
-  form.querySelectorAll('input[name="wcam_frame"]').forEach(input => input.addEventListener("change", () => {
-    form.querySelectorAll(".wcam-frame-option").forEach(label => label.classList.toggle("is-selected", label.contains(input) && input.checked));
-    renderPreview();
-  }));
+  // ---- Frame palette: drag a chip onto a photo, or tap-then-tap ----
+  const framePalette = document.getElementById("wcam-frame-picker");
+  let activeChipFrame = null; // { id, url } selected via tap, for the tap-to-assign fallback
+
+  function setActiveChip(chip) {
+    framePalette?.querySelectorAll(".wcam-frame-chip").forEach(c => c.classList.remove("is-active"));
+    if (chip) chip.classList.add("is-active");
+  }
+
+  function cardAtPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest(".wcam-review-card") : null;
+  }
+
+  function assignFrameToCard(card, frameId, frameUrl) {
+    const index = Number(card.dataset.index);
+    if (Number.isNaN(index) || !items[index]) return;
+    items[index].frameId = frameId;
+    items[index].frameUrl = frameUrl;
+    renderReview();
+  }
+
+  framePalette?.querySelectorAll(".wcam-frame-chip").forEach(chip => {
+    const frameId = Number(chip.dataset.frameId || 0);
+    const frameUrl = chip.dataset.frameUrl || "";
+
+    chip.addEventListener("click", () => {
+      if (activeChipFrame && activeChipFrame.id === frameId) { activeChipFrame = null; setActiveChip(null); return; }
+      activeChipFrame = { id: frameId, url: frameUrl };
+      setActiveChip(chip);
+    });
+
+    chip.addEventListener("pointerdown", event => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      const startX = event.clientX, startY = event.clientY;
+      let dragging = false;
+      let ghost = null;
+
+      function moveGhost(x, y) {
+        if (ghost) { ghost.style.left = `${x}px`; ghost.style.top = `${y}px`; }
+      }
+
+      function onMove(moveEvent) {
+        if (!dragging) {
+          if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 8) return;
+          dragging = true;
+          ghost = chip.cloneNode(true);
+          ghost.classList.add("wcam-frame-drag-ghost");
+          document.body.appendChild(ghost);
+        }
+        moveGhost(moveEvent.clientX, moveEvent.clientY);
+        reviewGrid?.querySelectorAll(".wcam-review-card").forEach(c => c.classList.remove("is-drop-target"));
+        const target = cardAtPoint(moveEvent.clientX, moveEvent.clientY);
+        if (target) target.classList.add("is-drop-target");
+      }
+
+      function onUp(upEvent) {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        if (ghost) ghost.remove();
+        reviewGrid?.querySelectorAll(".wcam-review-card").forEach(c => c.classList.remove("is-drop-target"));
+        if (dragging) {
+          const target = cardAtPoint(upEvent.clientX, upEvent.clientY);
+          if (target) assignFrameToCard(target, frameId, frameUrl);
+        }
+      }
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+    });
+  });
+
+  filesInput?.addEventListener("change", () => {
+    const files = Array.from(filesInput.files || []);
+    if (!files.length) return;
+    addItems(files.map(file => ({ blob: file, name: file.name, previewUrl: URL.createObjectURL(file), caption: "" })));
+    filesInput.value = "";
+    renderReview();
+    goToStep("review");
+  });
 
   // ---- Live in-browser camera capture ----
   const openCameraBtn = document.getElementById("wcam-open-camera");
-  const cameraPanel = document.getElementById("wcam-camera-panel");
   const cameraVideo = document.getElementById("wcam-camera-video");
   const cameraCanvas = document.getElementById("wcam-camera-canvas");
   const cameraError = document.getElementById("wcam-camera-error");
@@ -95,6 +225,7 @@
   const cameraCloseBtn = document.getElementById("wcam-camera-close");
   const cameraShotsEl = document.getElementById("wcam-camera-shots");
   const cameraDoneBtn = document.getElementById("wcam-camera-done");
+  const cameraSaveBtn = document.getElementById("wcam-camera-save");
 
   let cameraStream = null;
   let facingMode = "environment";
@@ -102,7 +233,7 @@
 
   const cameraSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
-  if (openCameraBtn && cameraPanel && cameraVideo && cameraSupported()) {
+  if (openCameraBtn && cameraVideo && cameraSupported()) {
     openCameraBtn.hidden = false;
     openCameraBtn.addEventListener("click", openCamera);
 
@@ -122,8 +253,8 @@
       if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); cameraStream = null; }
     }
 
-    function openCamera() { cameraPanel.hidden = false; renderShots(); startStream(); }
-    function closeCamera() { stopStream(); cameraPanel.hidden = true; }
+    function openCamera() { goToStep("camera"); renderShots(); startStream(); }
+    function closeCamera() { stopStream(); goToStep("method"); }
 
     cameraCloseBtn?.addEventListener("click", closeCamera);
     cameraSwitchBtn?.addEventListener("click", () => { facingMode = facingMode === "environment" ? "user" : "environment"; startStream(); });
@@ -153,41 +284,130 @@
         cameraShotsEl.appendChild(item);
       });
       cameraDoneBtn.hidden = cameraShots.length === 0;
+      if (cameraSaveBtn) cameraSaveBtn.hidden = cameraShots.length === 0;
     }
+
+    // Saves the just-taken photos to the guest's own device (Photos/camera
+    // roll on a phone, via the native share sheet) BEFORE upload, so a
+    // network or site hiccup during upload can never lose the actual shots.
+    async function saveShotsToPhotos() {
+      if (!cameraShots.length) return;
+      const files = cameraShots.map((shot, index) => new File([shot.blob], `wedding-photo-${Date.now()}-${index}.jpg`, { type: "image/jpeg" }));
+      try {
+        if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
+          await navigator.share({ files });
+        } else {
+          files.forEach(file => {
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(file);
+            link.download = file.name;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+          });
+        }
+      } catch (err) {
+        if (err && err.name !== "AbortError") {
+          alert("Could not save the photos to your device. Your photos are still fine here — you can try again, or just continue.");
+        }
+      }
+    }
+
+    cameraSaveBtn?.addEventListener("click", saveShotsToPhotos);
 
     cameraDoneBtn?.addEventListener("click", () => {
       if (!cameraShots.length) return;
-      const dt = new DataTransfer();
-      Array.from(filesInput.files || []).forEach(file => dt.items.add(file));
-      cameraShots.forEach((shot, index) => dt.items.add(new File([shot.blob], `camera-${Date.now()}-${index}.jpg`, { type: "image/jpeg" })));
-      filesInput.files = dt.files;
-      cameraShots.forEach(shot => URL.revokeObjectURL(shot.url));
+      addItems(cameraShots.map((shot, index) => ({
+        blob: shot.blob,
+        name: `camera-${Date.now()}-${index}.jpg`,
+        previewUrl: shot.url,
+        caption: "",
+      })));
       cameraShots = [];
       renderShots();
-      closeCamera();
-      renderPreview();
+      stopStream();
+      renderReview();
+      goToStep("review");
     });
   }
 
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
-    const files = Array.from(filesInput.files || []); if (!files.length) return;
-    submit.disabled = true; status.textContent = `Uploading 0 of ${files.length}…`;
-    const uploaded = []; const frame = selectedFrame();
-    try {
-      for (let i = 0; i < files.length; i++) {
-        status.textContent = `Uploading ${i + 1} of ${files.length}…`;
-        const body = new FormData();
-        body.append("photo", files[i]); body.append("guest_name", document.getElementById("wcam-name").value);
-        body.append("caption", document.getElementById("wcam-caption").value); body.append("live", document.getElementById("wcam-live").checked ? "1" : "0"); body.append("frame_id", String(frame.id));
-        const response = await fetch(WeddingCamera.uploadUrl, { method: "POST", body });
-        const data = await response.json(); if (!response.ok) throw new Error(data?.message || "One of the photos could not be uploaded.");
-        uploaded.push({ id: data.id, token: data.token, live: data.live, thumbnail: data.thumbnail, frame_id: data.frame_id, frame_url: data.frame_url });
+  // ---- Faster uploads: shrink each photo client-side before sending it ----
+  function resizeForUpload(blob, maxDim = 2400, quality = 0.86) {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        if (scale >= 1) { URL.revokeObjectURL(url); resolve(blob); return; }
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(resized => { URL.revokeObjectURL(url); resolve(resized || blob); }, "image/jpeg", quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
+      img.src = url;
+    });
+  }
+
+  async function uploadAll(uploadItems) {
+    const name = nameInput ? nameInput.value : "";
+    const total = uploadItems.length;
+    const results = new Array(total);
+    let completed = 0;
+    status.textContent = `Uploading 0 of ${total}…`;
+
+    async function uploadOne(item, index) {
+      const resized = await resizeForUpload(item.blob);
+      const body = new FormData();
+      body.append("photo", resized, item.name || `photo-${index}.jpg`);
+      body.append("guest_name", name);
+      body.append("caption", item.caption || "");
+      body.append("frame_id", String(item.frameId || 0));
+      const response = await fetch(WeddingCamera.uploadUrl, { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "One of the photos could not be uploaded.");
+      completed++;
+      status.textContent = `Uploading ${completed} of ${total}…`;
+      results[index] = { id: data.id, token: data.token, live: data.live, thumbnail: data.thumbnail, frame_id: data.frame_id, frame_url: data.frame_url };
+    }
+
+    const queue = uploadItems.map((item, index) => ({ item, index }));
+    const concurrency = Math.min(3, total);
+    async function worker() {
+      let next;
+      while ((next = queue.shift())) {
+        await uploadOne(next.item, next.index);
       }
+    }
+    await Promise.all(Array.from({ length: concurrency }, worker));
+    return results.filter(Boolean);
+  }
+
+  finalSubmit?.addEventListener("click", async () => {
+    if (!items.length) return;
+    finalSubmit.disabled = true;
+    if (addMoreBtn) addMoreBtn.disabled = true;
+    const batch = items;
+    try {
+      const uploaded = await uploadAll(batch);
       saveMine([...uploaded, ...getMine()].slice(0, 250));
-      status.textContent = files.length === 1 ? (WeddingCamera.successSingle || "✨ We got it! Your photo is in the wedding album.") : (WeddingCamera.successMulti || "✨ We got them! {count} photos are in the wedding album.").replace("{count}", String(files.length));
-      filesInput.value = ""; preview.innerHTML = ""; preview.hidden = true; renderMine();
-    } catch (err) { status.textContent = err.message || "Something went wrong. Please try again."; }
-    finally { submit.disabled = false; }
+      status.textContent = batch.length === 1
+        ? (WeddingCamera.successSingle || "✨ We got it! Your photo is in the wedding album.")
+        : (WeddingCamera.successMulti || "✨ We got them! {count} photos are in the wedding album.").replace("{count}", String(batch.length));
+      batch.forEach(item => URL.revokeObjectURL(item.previewUrl));
+      items = [];
+      renderReview();
+      renderMine();
+      goToStep("method"); // ready to add another batch right away
+    } catch (err) {
+      status.textContent = err.message || "Something went wrong. Please try again.";
+    } finally {
+      finalSubmit.disabled = false;
+      if (addMoreBtn) addMoreBtn.disabled = false;
+    }
   });
+
+  addMoreBtn?.addEventListener("click", () => goToStep("method"));
 })();

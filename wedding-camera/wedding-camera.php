@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.5.1
+ * Version: 0.7.2
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.5.1' );
+define( 'WCAM_VERSION', '0.7.2' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -44,7 +44,6 @@ final class Wedding_Camera {
     private function default_settings() {
         return [
             'uploads_open'        => '1',
-            'default_live'        => '1',
             'frames_enabled'      => '1',
             'show_captions'       => '1',
             'show_guest_names'    => '1',
@@ -52,12 +51,12 @@ final class Wedding_Camera {
             'max_upload_mb'       => 20,
             'refresh_seconds'     => 7,
             'feature_seconds'     => 25,
+            'wall_layout'         => 'rows',
+            'wall_rows'           => 3,
             'guest_eyebrow'        => 'Shannon + Alex',
             'guest_title'          => 'Capture the Magic',
             'guest_intro'          => 'Share the wedding through your eyes.',
             'upload_button_text'   => '📸 Take or Choose Photos',
-            'live_title_text'      => 'Add to the Live Photo Wall ✨',
-            'live_help_text'       => 'Uncheck this if you only want to send the photo to us.',
             'submit_button_text'   => 'Add to Our Album',
             'success_single_text'  => '✨ We got it! Your photo is in the wedding album.',
             'success_multi_text'   => '✨ We got them! {count} photos are in the wedding album.',
@@ -183,6 +182,53 @@ final class Wedding_Camera {
         return '<style id="wcam-inline-style">' . $css . '</style>';
     }
 
+    /**
+     * Prints a tiny inline script, once per page, that catches any
+     * JavaScript error on the page (ours or a conflicting plugin/theme
+     * script) and shows it in a visible on-page banner. This lets a
+     * non-technical site owner see exactly what broke without opening
+     * browser devtools — especially useful since a broken guest-camera
+     * page tends to navigate away before anyone can read the console.
+     */
+    private function inline_debug_script_once() {
+        static $printed = false;
+        if ( $printed ) return '';
+        $printed = true;
+        return <<<'HTML'
+<script id="wcam-debug-script">(function(){
+  function banner(msg){
+    try {
+      var el = document.getElementById("wcam-debug-banner");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "wcam-debug-banner";
+        el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#8a3b3b;color:#fff;padding:10px 40px 10px 14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;white-space:pre-wrap;word-break:break-word;";
+        var close = document.createElement("button");
+        close.textContent = "×";
+        close.setAttribute("aria-label", "Dismiss");
+        close.style.cssText = "position:absolute;top:6px;right:10px;background:none;border:0;color:#fff;font-size:18px;line-height:1;cursor:pointer;";
+        close.addEventListener("click", function(){ el.remove(); });
+        el.appendChild(close);
+        var text = document.createElement("div");
+        text.id = "wcam-debug-banner-text";
+        el.appendChild(text);
+        (document.body || document.documentElement).appendChild(el);
+      }
+      var textEl = document.getElementById("wcam-debug-banner-text");
+      textEl.textContent += (textEl.textContent ? "\n" : "") + msg;
+    } catch (e) {}
+  }
+  window.addEventListener("error", function(e){
+    banner("Page error: " + e.message + " (" + (e.filename || "") + ":" + (e.lineno || "") + ")");
+  });
+  window.addEventListener("unhandledrejection", function(e){
+    var reason = e.reason && e.reason.message ? e.reason.message : e.reason;
+    banner("Unhandled promise error: " + reason);
+  });
+})();</script>
+HTML;
+    }
+
     public function admin_assets( $hook ) {
         if ( strpos( (string) $hook, 'wedding-camera' ) === false ) return;
         wp_enqueue_media();
@@ -274,17 +320,22 @@ final class Wedding_Camera {
             return new WP_Error( 'wcam_bad_type', 'Please upload an image file.', [ 'status' => 415 ] );
         }
 
+        // Guests already send a resized/compressed image (see camera.js), and
+        // we only ever display 'thumbnail'/'medium'/'medium_large'/'large' —
+        // skip generating any other registered size (theme-added huge crops,
+        // 1536/2048px, etc.) to keep upload processing fast on shared hosting.
+        add_filter( 'intermediate_image_sizes_advanced', [ $this, 'limit_generated_image_sizes' ] );
         $attachment_id = media_handle_upload(
             'photo',
             0,
             [ 'post_title' => sanitize_text_field( pathinfo( $file['name'], PATHINFO_FILENAME ) ) ],
             [ 'test_form' => false, 'mimes' => $this->allowed_mimes() ]
         );
+        remove_filter( 'intermediate_image_sizes_advanced', [ $this, 'limit_generated_image_sizes' ] );
         if ( is_wp_error( $attachment_id ) ) return $attachment_id;
 
         $guest_name = sanitize_text_field( (string) $request->get_param( 'guest_name' ) );
         $caption    = sanitize_textarea_field( (string) $request->get_param( 'caption' ) );
-        $live       = filter_var( $request->get_param( 'live' ), FILTER_VALIDATE_BOOLEAN );
         $frame_id   = absint( $request->get_param( 'frame_id' ) );
 
         if ( $settings['frames_enabled'] !== '1' || ! $this->frame_by_id( $frame_id ) ) $frame_id = 0;
@@ -292,7 +343,9 @@ final class Wedding_Camera {
         $token = wp_generate_password( 40, false, false );
         update_post_meta( $attachment_id, self::META_GUEST_NAME, $guest_name );
         update_post_meta( $attachment_id, self::META_CAPTION, $caption );
-        update_post_meta( $attachment_id, self::META_LIVE, $live ? '1' : '0' );
+        // Every guest upload goes straight to the Live Wall; an admin can
+        // still hide an individual photo later from the Photos screen.
+        update_post_meta( $attachment_id, self::META_LIVE, '1' );
         update_post_meta( $attachment_id, self::META_TOKEN_HASH, wp_hash_password( $token ) );
         update_post_meta( $attachment_id, self::META_GUEST, '1' );
         update_post_meta( $attachment_id, self::META_FRAME_ID, $frame_id );
@@ -301,11 +354,20 @@ final class Wedding_Camera {
         return rest_ensure_response( [
             'id'        => $attachment_id,
             'token'     => $token,
-            'live'      => $live,
+            'live'      => true,
             'thumbnail' => wp_get_attachment_image_url( $attachment_id, 'medium' ),
             'frame_id'  => $frame_id,
             'frame_url' => $frame ? $frame['url'] : '',
         ] );
+    }
+
+    /**
+     * Restricts newly-uploaded guest photos to just the sizes this plugin
+     * actually displays anywhere, so a phone photo doesn't get resized into
+     * half a dozen sizes it will never use.
+     */
+    public function limit_generated_image_sizes( $sizes ) {
+        return array_intersect_key( $sizes, array_flip( [ 'thumbnail', 'medium', 'medium_large', 'large' ] ) );
     }
 
     public function get_live_photos() {
@@ -359,19 +421,26 @@ final class Wedding_Camera {
         $settings = $this->settings();
         $frames = $settings['frames_enabled'] === '1' ? $this->frames() : [];
 
-        wp_enqueue_style( 'wcam' );
-        wp_enqueue_script( 'wcam-camera' );
-        wp_localize_script( 'wcam-camera', 'WeddingCamera', [
+        $config = [
             'uploadUrl'     => esc_url_raw( rest_url( 'wedding-camera/v1/upload' ) ),
             'toggleBaseUrl' => esc_url_raw( rest_url( 'wedding-camera/v1/mine/' ) ),
-            'defaultLive'   => $settings['default_live'] === '1',
             'uploadsOpen'   => $settings['uploads_open'] === '1',
             'frames'        => $frames,
             'successSingle' => $settings['success_single_text'],
             'successMulti'  => $settings['success_multi_text'],
-        ] );
+        ];
+
+        wp_enqueue_style( 'wcam' );
+        wp_enqueue_script( 'wcam-camera' );
+        // wp_localize_script() alone has proven unreliable on some hosts
+        // (its <script>var WeddingCamera=...</script> block can silently
+        // fail to print), so the same data is also printed inline below as
+        // the guaranteed source of truth.
+        wp_localize_script( 'wcam-camera', 'WeddingCamera', $config );
 
         ob_start(); ?>
+        <?php echo $this->inline_debug_script_once(); ?>
+        <script id="wcam-camera-config">var WeddingCamera = <?php echo wp_json_encode( $config ); ?>;</script>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-app" id="wcam-app">
             <section class="wcam-hero">
@@ -383,18 +452,30 @@ final class Wedding_Camera {
             <?php if ( $settings['uploads_open'] !== '1' ) : ?>
                 <div class="wcam-card wcam-closed"><h2>Thank you for sharing the magic ✨</h2><p>Photo uploads are currently closed.</p></div>
             <?php else : ?>
-            <form class="wcam-card" id="wcam-upload-form">
-                <div class="wcam-capture-choices">
-                    <button type="button" id="wcam-open-camera" class="wcam-upload-button wcam-camera-trigger" hidden>
-                        <span>📷 Take a Photo</span>
-                    </button>
-                    <label class="wcam-upload-button wcam-gallery-trigger">
-                        <span><?php echo esc_html( $settings['upload_button_text'] ); ?></span>
-                        <input id="wcam-files" type="file" name="photo" accept="image/*" multiple required>
-                    </label>
-                </div>
+            <div class="wcam-card wcam-wizard" id="wcam-wizard">
 
-                <div id="wcam-camera-panel" class="wcam-camera-panel" hidden>
+                <section class="wcam-step" id="wcam-step-name" data-step="name">
+                    <h2>What's your name?</h2>
+                    <p class="wcam-step-help">So we know who to thank ✨</p>
+                    <input id="wcam-name" class="wcam-name-input" type="text" maxlength="80" autocomplete="name" placeholder="Your name">
+                    <button type="button" class="wcam-submit wcam-step-next" data-goto="method">Continue</button>
+                </section>
+
+                <section class="wcam-step" id="wcam-step-method" data-step="method" hidden>
+                    <h2>Add Photos</h2>
+                    <div class="wcam-capture-choices">
+                        <button type="button" id="wcam-open-camera" class="wcam-upload-button wcam-camera-trigger" hidden>
+                            <span>📷 Take Photos</span>
+                        </button>
+                        <label class="wcam-upload-button wcam-gallery-trigger">
+                            <span><?php echo esc_html( $settings['upload_button_text'] ); ?></span>
+                            <input id="wcam-files" type="file" accept="image/*" multiple>
+                        </label>
+                    </div>
+                    <button type="button" class="wcam-step-back" data-goto="name">← Back</button>
+                </section>
+
+                <section class="wcam-step wcam-camera-panel" id="wcam-step-camera" data-step="camera" hidden>
                     <div class="wcam-camera-viewport">
                         <video id="wcam-camera-video" playsinline autoplay muted></video>
                         <canvas id="wcam-camera-canvas" hidden></canvas>
@@ -406,42 +487,40 @@ final class Wedding_Camera {
                         <button type="button" id="wcam-camera-close" class="wcam-mini-button">Close</button>
                     </div>
                     <div id="wcam-camera-shots" class="wcam-camera-shots"></div>
+                    <button type="button" id="wcam-camera-save" class="wcam-mini-button wcam-save-photos" hidden>💾 Save to Photos (in case of issues)</button>
                     <button type="button" id="wcam-camera-done" class="wcam-submit" hidden>Use These Photos</button>
-                </div>
+                </section>
 
-                <div id="wcam-preview" class="wcam-preview" hidden></div>
+                <section class="wcam-step" id="wcam-step-review" data-step="review" hidden>
+                    <h2>Review Your Photos</h2>
+                    <p class="wcam-step-help">Add a caption to any photo, or skip and just upload.</p>
 
-                <?php if ( ! empty( $frames ) ) : ?>
-                <fieldset class="wcam-frame-picker" id="wcam-frame-picker">
-                    <legend>Add a frame <small>(optional)</small></legend>
-                    <p class="wcam-frame-help">Your original photo stays untouched — the frame can be changed later.</p>
-                    <div class="wcam-frame-options">
-                        <label class="wcam-frame-option is-selected">
-                            <input type="radio" name="wcam_frame" value="0" checked>
-                            <span class="wcam-frame-none">No Frame</span>
-                        </label>
-                        <?php foreach ( $frames as $frame ) : ?>
-                        <label class="wcam-frame-option">
-                            <input type="radio" name="wcam_frame" value="<?php echo esc_attr( $frame['id'] ); ?>" data-frame-url="<?php echo esc_url( $frame['url'] ); ?>">
-                            <span class="wcam-frame-thumb"><img src="<?php echo esc_url( $frame['url'] ); ?>" alt=""></span>
-                            <strong><?php echo esc_html( $frame['label'] ); ?></strong>
-                        </label>
-                        <?php endforeach; ?>
-                    </div>
-                </fieldset>
-                <?php endif; ?>
+                    <?php if ( ! empty( $frames ) ) : ?>
+                    <fieldset class="wcam-frame-picker" id="wcam-frame-picker">
+                        <legend>Frames <small>(optional)</small></legend>
+                        <p class="wcam-frame-help">Drag a frame onto a photo below — or tap a frame, then tap a photo. Your original photo stays untouched.</p>
+                        <div class="wcam-frame-options">
+                            <button type="button" class="wcam-frame-chip" data-frame-id="0" data-frame-url="">
+                                <span class="wcam-frame-none">No Frame</span>
+                            </button>
+                            <?php foreach ( $frames as $frame ) : ?>
+                            <button type="button" class="wcam-frame-chip" data-frame-id="<?php echo esc_attr( $frame['id'] ); ?>" data-frame-url="<?php echo esc_url( $frame['url'] ); ?>">
+                                <span class="wcam-frame-thumb"><img src="<?php echo esc_url( $frame['url'] ); ?>" alt=""></span>
+                                <strong><?php echo esc_html( $frame['label'] ); ?></strong>
+                            </button>
+                            <?php endforeach; ?>
+                        </div>
+                    </fieldset>
+                    <?php endif; ?>
 
-                <label class="wcam-field"><span>Your name <small>(optional)</small></span><input id="wcam-name" type="text" maxlength="80" autocomplete="name"></label>
-                <label class="wcam-field"><span>Caption <small>(optional)</small></span><textarea id="wcam-caption" maxlength="240" rows="3"></textarea></label>
+                    <div id="wcam-review-grid" class="wcam-review-grid"></div>
 
-                <label class="wcam-live-choice">
-                    <input id="wcam-live" type="checkbox" <?php checked( $settings['default_live'], '1' ); ?>>
-                    <span><strong><?php echo esc_html( $settings['live_title_text'] ); ?></strong><small><?php echo esc_html( $settings['live_help_text'] ); ?></small></span>
-                </label>
+                    <button type="button" class="wcam-upload-button wcam-add-more" id="wcam-add-more"><span>+ Add More Photos</span></button>
+                    <button type="button" class="wcam-submit" id="wcam-final-submit"><?php echo esc_html( $settings['submit_button_text'] ); ?></button>
+                    <p id="wcam-status" class="wcam-status" aria-live="polite"></p>
+                </section>
 
-                <button class="wcam-submit" type="submit"><?php echo esc_html( $settings['submit_button_text'] ); ?></button>
-                <p id="wcam-status" class="wcam-status" aria-live="polite"></p>
-            </form>
+            </div>
             <?php endif; ?>
 
             <section id="wcam-my-photos" class="wcam-my-photos" hidden>
@@ -463,18 +542,27 @@ final class Wedding_Camera {
             'date'       => '10 · 16 · 26',
         ], $atts, 'wedding_photo_wall' );
 
-        wp_enqueue_style( 'wcam' );
-        wp_enqueue_script( 'wcam-wall' );
-        wp_localize_script( 'wcam-wall', 'WeddingWall', [
+        $layout = $settings['wall_layout'] === 'grid' ? 'grid' : 'rows';
+        $rows   = max( 2, min( 5, absint( $settings['wall_rows'] ) ) );
+
+        $config = [
             'liveUrl'         => esc_url_raw( rest_url( 'wedding-camera/v1/live' ) ),
             'featureEveryMs'  => max( 10, absint( $settings['feature_seconds'] ) ) * 1000,
             'refreshEveryMs'  => max( 3, absint( $settings['refresh_seconds'] ) ) * 1000,
             'featureEnabled'  => $settings['feature_enabled'] === '1',
             'showCaptions'    => $settings['show_captions'] === '1',
             'showGuestNames'  => $settings['show_guest_names'] === '1',
-        ] );
+            'layout'          => $layout,
+            'rows'            => $rows,
+        ];
+
+        wp_enqueue_style( 'wcam' );
+        wp_enqueue_script( 'wcam-wall' );
+        wp_localize_script( 'wcam-wall', 'WeddingWall', $config );
 
         ob_start(); ?>
+        <?php echo $this->inline_debug_script_once(); ?>
+        <script id="wcam-wall-config">var WeddingWall = <?php echo wp_json_encode( $config ); ?>;</script>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-wall" id="wcam-wall">
             <header class="wcam-wall-header"><p><?php echo esc_html( $atts['eyebrow'] ); ?></p><h1><?php echo esc_html( $atts['title'] ); ?></h1><span><?php echo esc_html( $atts['date'] ); ?></span></header>
@@ -487,15 +575,17 @@ final class Wedding_Camera {
                 </aside>
                 <?php endif; ?>
             </div>
+            <section id="wcam-spotlight" class="wcam-spotlight" hidden>
+                <p class="wcam-spotlight-label">✨ Featured Moment</p>
+                <div class="wcam-spotlight-media"><img id="wcam-spotlight-image" class="wcam-photo-image" alt="Featured wedding guest photo"><img id="wcam-spotlight-frame" class="wcam-photo-frame" alt="" hidden></div>
+                <p id="wcam-spotlight-caption" class="wcam-spotlight-caption"></p>
+            </section>
+            <?php if ( $layout === 'rows' ) : ?>
+            <div id="wcam-wall-rows" class="wcam-wall-rows"></div>
+            <?php else : ?>
             <div id="wcam-wall-grid" class="wcam-wall-grid"></div>
+            <?php endif; ?>
             <div id="wcam-wall-empty" class="wcam-wall-empty"><strong>The photo wall is waking up ✨</strong><span>Scan the wedding QR code to add the first photo.</span></div>
-            <div id="wcam-feature" class="wcam-feature" hidden aria-hidden="true">
-                <div class="wcam-feature-backdrop"></div>
-                <figure class="wcam-feature-card">
-                    <div class="wcam-feature-media"><img id="wcam-feature-image" class="wcam-photo-image" alt="Featured wedding guest photo"><img id="wcam-feature-frame" class="wcam-photo-frame" alt="" hidden></div>
-                    <figcaption id="wcam-feature-caption"></figcaption>
-                </figure>
-            </div>
         </div>
         <?php return ob_get_clean();
     }
@@ -525,6 +615,7 @@ final class Wedding_Camera {
         wp_enqueue_script( 'wcam-share' );
 
         ob_start(); ?>
+        <?php echo $this->inline_debug_script_once(); ?>
         <?php echo $this->inline_style_once(); ?>
         <div class="wcam-qr-sheet">
             <?php for ( $i = 0; $i < $copies; $i++ ) : ?>
@@ -643,8 +734,6 @@ final class Wedding_Camera {
                     <label class="wcam-setting-row"><span>Main heading</span><input type="text" class="regular-text" name="guest_title" maxlength="120" value="<?php echo esc_attr( $s['guest_title'] ); ?>"></label>
                     <label class="wcam-setting-row"><span>Intro text</span><textarea class="large-text" rows="2" name="guest_intro" maxlength="300"><?php echo esc_textarea( $s['guest_intro'] ); ?></textarea></label>
                     <label class="wcam-setting-row"><span>Upload button</span><input type="text" class="regular-text" name="upload_button_text" maxlength="120" value="<?php echo esc_attr( $s['upload_button_text'] ); ?>"></label>
-                    <label class="wcam-setting-row"><span>Live checkbox title</span><input type="text" class="regular-text" name="live_title_text" maxlength="160" value="<?php echo esc_attr( $s['live_title_text'] ); ?>"></label>
-                    <label class="wcam-setting-row"><span>Live checkbox helper</span><textarea class="large-text" rows="2" name="live_help_text" maxlength="300"><?php echo esc_textarea( $s['live_help_text'] ); ?></textarea></label>
                     <label class="wcam-setting-row"><span>Submit button</span><input type="text" class="regular-text" name="submit_button_text" maxlength="120" value="<?php echo esc_attr( $s['submit_button_text'] ); ?>"></label>
                     <label class="wcam-setting-row"><span>Success message — one photo</span><input type="text" class="large-text" name="success_single_text" maxlength="220" value="<?php echo esc_attr( $s['success_single_text'] ); ?>"></label>
                     <label class="wcam-setting-row"><span>Success message — multiple photos</span><input type="text" class="large-text" name="success_multi_text" maxlength="220" value="<?php echo esc_attr( $s['success_multi_text'] ); ?>"><small>Use <code>{count}</code> where you want the number of uploaded photos to appear.</small></label>
@@ -653,15 +742,22 @@ final class Wedding_Camera {
                 <section class="wcam-settings-card">
                     <h2>Guest Uploads</h2>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="uploads_open" value="1" <?php checked( $s['uploads_open'], '1' ); ?>><span><strong>Uploads are open</strong><small>Turn this off after the wedding whenever you want to stop new uploads.</small></span></label>
-                    <label class="wcam-setting-toggle"><input type="checkbox" name="default_live" value="1" <?php checked( $s['default_live'], '1' ); ?>><span><strong>Live Photo Wall checked by default</strong><small>Guests can still uncheck it before uploading.</small></span></label>
                     <label class="wcam-setting-row"><span>Maximum upload size</span><input type="number" min="1" max="50" name="max_upload_mb" value="<?php echo esc_attr( $s['max_upload_mb'] ); ?>"><small>MB per photo (your server may impose a lower limit).</small></label>
+                    <p><small>Every guest upload appears on the Live Photo Wall automatically. An admin can hide an individual photo later from Wedding Camera → Photos.</small></p>
                 </section>
 
                 <section class="wcam-settings-card">
                     <h2>Live Wall</h2>
+                    <label class="wcam-setting-row"><span>Layout</span>
+                        <select name="wall_layout">
+                            <option value="rows" <?php selected( $s['wall_layout'], 'rows' ); ?>>Scrolling rows (photos drift sideways, great for a TV/projector)</option>
+                            <option value="grid" <?php selected( $s['wall_layout'], 'grid' ); ?>>Classic grid (static, Pinterest-style)</option>
+                        </select>
+                    </label>
+                    <label class="wcam-setting-row"><span>Number of scrolling rows</span><input type="number" min="2" max="5" name="wall_rows" value="<?php echo esc_attr( $s['wall_rows'] ); ?>"><small>Only used by the Scrolling rows layout.</small></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="show_captions" value="1" <?php checked( $s['show_captions'], '1' ); ?>><span><strong>Show captions</strong></span></label>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="show_guest_names" value="1" <?php checked( $s['show_guest_names'], '1' ); ?>><span><strong>Show guest names</strong></span></label>
-                    <label class="wcam-setting-toggle"><input type="checkbox" name="feature_enabled" value="1" <?php checked( $s['feature_enabled'], '1' ); ?>><span><strong>Featured photo moments</strong><small>Periodically enlarges one random live photo.</small></span></label>
+                    <label class="wcam-setting-toggle"><input type="checkbox" name="feature_enabled" value="1" <?php checked( $s['feature_enabled'], '1' ); ?>><span><strong>Featured photo spotlight</strong><small>Highlights one live photo in a banner at the top of the wall, changing periodically. Never covers the rest of the page.</small></span></label>
                     <label class="wcam-setting-row"><span>Refresh wall every</span><input type="number" min="3" max="60" name="refresh_seconds" value="<?php echo esc_attr( $s['refresh_seconds'] ); ?>"><small>seconds</small></label>
                     <label class="wcam-setting-row"><span>Feature a photo every</span><input type="number" min="10" max="300" name="feature_seconds" value="<?php echo esc_attr( $s['feature_seconds'] ); ?>"><small>seconds</small></label>
                 </section>
@@ -669,7 +765,7 @@ final class Wedding_Camera {
                 <section class="wcam-settings-card">
                     <h2>Guest Frames</h2>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="frames_enabled" value="1" <?php checked( $s['frames_enabled'], '1' ); ?>><span><strong>Let guests add frames</strong><small>Frames are saved as overlays, not baked into the original photo.</small></span></label>
-                    <p><strong>Canva tip:</strong> export each frame as a PNG with a transparent center/background. Keep important decoration near the edges.</p>
+                    <p><strong>Canva size:</strong> create a <strong>1080 × 1080 px square</strong> design (Canva → Custom size), keep the center transparent, and export as <strong>PNG with transparent background</strong>. Every framed photo on the site is cropped into this same square, so a frame designed at this exact size will always line up correctly. Keep important decoration within about 8% of each edge, since guest photos are cropped to fill the square and may trim a sliver off the longer side.</p>
                     <div id="wcam-frame-rows" class="wcam-frame-rows">
                         <?php foreach ( $frames as $frame ) : ?>
                         <div class="wcam-frame-row">
@@ -763,9 +859,11 @@ final class Wedding_Camera {
         if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Not allowed.' );
         check_admin_referer( 'wcam_save_settings' );
 
-        $settings = [
+        // Merged onto the current settings (rather than replacing the option
+        // outright) so this form never wipes out fields it doesn't render,
+        // such as the Share & QR page's camera URL / share card text.
+        $settings = array_merge( $this->settings(), [
             'uploads_open'     => isset( $_POST['uploads_open'] ) ? '1' : '0',
-            'default_live'     => isset( $_POST['default_live'] ) ? '1' : '0',
             'frames_enabled'   => isset( $_POST['frames_enabled'] ) ? '1' : '0',
             'show_captions'    => isset( $_POST['show_captions'] ) ? '1' : '0',
             'show_guest_names' => isset( $_POST['show_guest_names'] ) ? '1' : '0',
@@ -773,16 +871,16 @@ final class Wedding_Camera {
             'max_upload_mb'    => max( 1, min( 50, absint( $_POST['max_upload_mb'] ?? 20 ) ) ),
             'refresh_seconds'  => max( 3, min( 60, absint( $_POST['refresh_seconds'] ?? 7 ) ) ),
             'feature_seconds'  => max( 10, min( 300, absint( $_POST['feature_seconds'] ?? 25 ) ) ),
+            'wall_layout'      => ( $_POST['wall_layout'] ?? '' ) === 'grid' ? 'grid' : 'rows',
+            'wall_rows'        => max( 2, min( 5, absint( $_POST['wall_rows'] ?? 3 ) ) ),
             'guest_eyebrow'       => sanitize_text_field( wp_unslash( $_POST['guest_eyebrow'] ?? 'Shannon + Alex' ) ),
             'guest_title'         => sanitize_text_field( wp_unslash( $_POST['guest_title'] ?? 'Capture the Magic' ) ),
             'guest_intro'         => sanitize_textarea_field( wp_unslash( $_POST['guest_intro'] ?? 'Share the wedding through your eyes.' ) ),
             'upload_button_text'  => sanitize_text_field( wp_unslash( $_POST['upload_button_text'] ?? '📸 Take or Choose Photos' ) ),
-            'live_title_text'     => sanitize_text_field( wp_unslash( $_POST['live_title_text'] ?? 'Add to the Live Photo Wall ✨' ) ),
-            'live_help_text'      => sanitize_textarea_field( wp_unslash( $_POST['live_help_text'] ?? 'Uncheck this if you only want to send the photo to us.' ) ),
             'submit_button_text'  => sanitize_text_field( wp_unslash( $_POST['submit_button_text'] ?? 'Add to Our Album' ) ),
             'success_single_text' => sanitize_text_field( wp_unslash( $_POST['success_single_text'] ?? '✨ We got it! Your photo is in the wedding album.' ) ),
             'success_multi_text'  => sanitize_text_field( wp_unslash( $_POST['success_multi_text'] ?? '✨ We got them! {count} photos are in the wedding album.' ) ),
-        ];
+        ] );
         update_option( self::OPTION_SETTINGS, $settings, false );
 
         $ids = isset( $_POST['frame_ids'] ) && is_array( $_POST['frame_ids'] ) ? array_map( 'absint', wp_unslash( $_POST['frame_ids'] ) ) : [];

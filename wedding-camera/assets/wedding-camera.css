@@ -7,6 +7,18 @@
   --wcam-line: rgba(47,42,50,.14);
 }
 
+.wcam-app,
+.wcam-wall,
+.wcam-qr-sheet {
+  /* Force light-mode native rendering for form controls (checkboxes,
+     text inputs) within our own UI, regardless of the visitor's or host
+     theme's dark-mode preference. Without this, a browser in dark mode
+     can supply its own light default text color for inputs even though
+     we set an explicit white/cream background, producing invisible
+     white-on-white text. */
+  color-scheme: light;
+}
+
 .wcam-app {
   max-width: 760px;
   margin: 0 auto;
@@ -64,62 +76,77 @@
   overflow:hidden;
 }
 
-.wcam-preview {
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:8px;
-  margin-bottom:18px;
-}
-.wcam-preview img,
-.wcam-more {
-  width:100%;
-  aspect-ratio:1/1;
-  object-fit:cover;
-  border-radius:12px;
-}
-.wcam-more {
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:#ece7ee;
-  font-weight:800;
-}
-
-.wcam-field {
-  display:block;
-  margin:15px 0;
-}
-.wcam-field span {
-  display:block;
-  font-weight:700;
-  margin-bottom:7px;
-}
-.wcam-field small { font-weight:400; opacity:.7; }
-.wcam-field input,
-.wcam-field textarea {
+/* Multi-step guest wizard (name -> method -> camera/gallery -> review) */
+.wcam-wizard { padding:26px 22px; overflow-x:hidden; }
+.wcam-step h2 { margin:0 0 6px; font-size:1.4rem; }
+.wcam-step-help { margin:0 0 18px; opacity:.72; }
+.wcam-name-input,
+.wcam-review-caption {
   box-sizing:border-box;
   width:100%;
   border:1px solid var(--wcam-line);
   border-radius:14px;
   padding:13px 14px;
   font:inherit;
+  color:var(--wcam-ink);
   background:white;
+}
+.wcam-name-input { margin-bottom:18px; font-size:1.05rem; }
+.wcam-step-back {
+  display:block;
+  width:100%;
+  margin-top:14px;
+  border:0;
+  background:none;
+  color:var(--wcam-ink);
+  opacity:.68;
+  font-weight:700;
+  cursor:pointer;
+  padding:10px;
 }
 
-.wcam-live-choice {
-  display:flex;
+.wcam-review-grid {
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
   gap:12px;
-  align-items:flex-start;
-  margin:20px 0;
-  padding:15px;
-  border:1px solid var(--wcam-line);
-  border-radius:16px;
-  background:white;
+  margin:6px 0 16px;
 }
-.wcam-live-choice input { margin-top:4px; transform:scale(1.25); }
-.wcam-live-choice span,
-.wcam-live-choice small { display:block; }
-.wcam-live-choice small { margin-top:3px; opacity:.72; }
+.wcam-review-card {
+  position:relative;
+  background:white;
+  border:1px solid var(--wcam-line);
+  border-radius:14px;
+  padding:8px;
+}
+.wcam-review-card > .wcam-photo-media {
+  width:100%;
+  aspect-ratio:1/1;
+  border-radius:10px;
+  background:#eee;
+  margin-bottom:8px;
+}
+.wcam-review-card > .wcam-photo-media .wcam-photo-image { width:100%; height:100%; object-fit:cover; }
+.wcam-review-card > .wcam-photo-media .wcam-photo-frame { object-fit:fill; }
+.wcam-review-caption { padding:9px 10px; font-size:.85rem; border-radius:10px; }
+.wcam-review-remove {
+  position:absolute;
+  top:14px;
+  right:14px;
+  width:26px;
+  height:26px;
+  border-radius:999px;
+  border:0;
+  background:rgba(21,18,24,.68);
+  color:#fff;
+  font-size:1rem;
+  line-height:1;
+  cursor:pointer;
+}
+.wcam-add-more { background:white; color:var(--wcam-ink); border:1px solid var(--wcam-line); margin-bottom:10px; }
+
+@media (max-width:480px) {
+  .wcam-review-grid { grid-template-columns:repeat(2,1fr); gap:8px; }
+}
 
 .wcam-submit {
   background:var(--wcam-sage);
@@ -147,17 +174,13 @@
   overflow:hidden;
   background:white;
 }
-.wcam-my-card img {
-  width:100%;
-  aspect-ratio:1/1;
-  object-fit:cover;
-  display:block;
-}
+.wcam-my-card .wcam-photo-image { display:block; }
 .wcam-mini-button {
   width:100%;
   border:0;
   padding:11px 8px;
   background:white;
+  color:var(--wcam-ink);
   cursor:pointer;
   font-weight:700;
 }
@@ -200,7 +223,7 @@
   box-shadow:0 12px 32px rgba(47,42,50,.10);
   animation:wcam-in .55s ease both;
 }
-.wcam-wall-card img {
+.wcam-wall-card .wcam-photo-image {
   width:100%;
   height:auto;
   display:block;
@@ -227,7 +250,6 @@
 
 @media (max-width:600px) {
   .wcam-card { padding:17px; border-radius:20px; }
-  .wcam-preview { grid-template-columns:repeat(2,1fr); }
   .wcam-wall { padding:18px 10px; }
   .wcam-wall-grid { columns:2 150px; column-gap:8px; }
   .wcam-wall-card { margin-bottom:8px; border-radius:11px; }
@@ -288,52 +310,51 @@
 .wcam-qr-card small { margin-top:4px; font-size:.72rem; opacity:.58; max-width:230px; overflow:hidden; text-overflow:ellipsis; }
 .wcam-wall-card { transition:opacity .35s ease, transform .35s ease; }
 .wcam-wall-card.is-leaving { opacity:0; transform:scale(.92); }
-.wcam-feature {
-  position:fixed;
-  inset:0;
-  z-index:99999;
-  display:grid;
-  place-items:center;
-  opacity:0;
-  transition:opacity .65s ease;
-  pointer-events:none;
+.wcam-spotlight {
+  max-width:1000px;
+  margin:0 auto 26px;
+  text-align:center;
 }
-.wcam-feature[hidden] { display:none; }
-.wcam-feature.is-visible { opacity:1; }
-.wcam-feature-backdrop {
-  position:absolute;
-  inset:0;
-  background:rgba(28,23,30,.84);
-  backdrop-filter:blur(18px);
+.wcam-spotlight[hidden] { display:none; }
+.wcam-spotlight-label {
+  text-transform:uppercase;
+  letter-spacing:.16em;
+  font-size:.78rem;
+  opacity:.72;
+  margin:0 0 10px;
 }
-.wcam-feature-card {
+.wcam-spotlight-media {
   position:relative;
-  z-index:1;
-  margin:0;
-  max-width:min(82vw,1200px);
-  max-height:84vh;
-  border-radius:26px;
+  display:inline-block;
+  border-radius:22px;
   overflow:hidden;
-  background:#fff;
-  box-shadow:0 30px 100px rgba(0,0,0,.38);
-  transform:scale(.94) translateY(16px);
-  transition:transform .65s cubic-bezier(.2,.8,.2,1);
+  background:#151218;
+  box-shadow:0 20px 60px rgba(47,42,50,.16);
+  transition:opacity .4s ease;
 }
-.wcam-feature.is-visible .wcam-feature-card { transform:none; }
-.wcam-feature-card img {
+.wcam-spotlight.is-fading .wcam-spotlight-media { opacity:0; }
+.wcam-spotlight-media .wcam-photo-image {
   display:block;
-  max-width:82vw;
-  max-height:76vh;
   width:auto;
   height:auto;
+  max-width:min(90vw,900px);
+  max-height:46vh;
   object-fit:contain;
-  background:#151218;
 }
-.wcam-feature-card figcaption {
-  padding:14px 20px 16px;
-  text-align:center;
-  font-size:clamp(1rem,1.5vw,1.35rem);
+.wcam-spotlight-media .wcam-photo-frame {
+  width:100%;
+  height:100%;
+  max-width:none;
+  max-height:none;
+  object-fit:fill;
 }
+.wcam-spotlight-caption {
+  margin:14px 0 0;
+  font-size:1rem;
+  transition:opacity .4s ease;
+}
+.wcam-spotlight.is-fading .wcam-spotlight-caption { opacity:0; }
+.wcam-spotlight-caption:empty { display:none; }
 @media (max-width:700px) {
   .wcam-wall-topbar { align-items:flex-start; }
   .wcam-qr-card { max-width:58vw; }
@@ -345,27 +366,73 @@
 .wcam-photo-media { position:relative; overflow:hidden; }
 .wcam-photo-image { display:block; width:100%; height:auto; }
 .wcam-photo-frame { position:absolute; inset:0; width:100%; height:100%; object-fit:fill; pointer-events:none; z-index:2; }
-.wcam-preview > .wcam-photo-media { width:100%; aspect-ratio:1/1; border-radius:12px; background:#eee; }
-.wcam-preview > .wcam-photo-media .wcam-photo-image { width:100%; height:100%; object-fit:cover; }
-.wcam-preview > .wcam-photo-media .wcam-photo-frame { object-fit:fill; }
-.wcam-frame-picker { border:0; padding:0; margin:22px 0; }
+.wcam-frame-picker {
+  border:0;
+  padding:0;
+  margin:22px 0;
+  /* <fieldset> has a browser-default "don't shrink below content" sizing
+     quirk that overrides normal width constraints — without this, a row of
+     frame options wide enough to need scrolling instead pushes the whole
+     fieldset (and the page around it) wider than the screen on a phone. */
+  min-width:0;
+}
 .wcam-frame-picker legend { font-weight:800; font-size:1rem; margin-bottom:3px; }
 .wcam-frame-picker legend small { font-weight:400; opacity:.68; }
 .wcam-frame-help { margin:0 0 12px; font-size:.9rem; opacity:.72; }
-.wcam-frame-options { display:flex; gap:10px; overflow-x:auto; padding:3px 2px 8px; scroll-snap-type:x proximity; }
-.wcam-frame-option { flex:0 0 104px; display:flex; flex-direction:column; gap:6px; align-items:center; padding:8px; border:2px solid transparent; border-radius:14px; background:white; cursor:pointer; scroll-snap-align:start; }
-.wcam-frame-option.is-selected { border-color:var(--wcam-purple); box-shadow:0 0 0 2px rgba(109,81,124,.10); }
-.wcam-frame-option input { position:absolute; opacity:0; pointer-events:none; }
+.wcam-frame-options { display:flex; gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:3px 2px 8px; scroll-snap-type:x proximity; }
+.wcam-frame-chip {
+  flex:0 0 104px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  align-items:center;
+  padding:8px;
+  border:2px solid transparent;
+  border-radius:14px;
+  background:white;
+  cursor:grab;
+  scroll-snap-align:start;
+  touch-action:pan-x;
+  font:inherit;
+  color:var(--wcam-ink);
+}
+.wcam-frame-chip.is-active { border-color:var(--wcam-purple); box-shadow:0 0 0 2px rgba(109,81,124,.10); }
 .wcam-frame-thumb,.wcam-frame-none { width:86px; height:86px; border-radius:10px; background:#f0ecef; display:flex; align-items:center; justify-content:center; overflow:hidden; text-align:center; font-size:.82rem; }
 .wcam-frame-thumb img { width:100%; height:100%; object-fit:contain; }
-.wcam-frame-option strong { font-size:.78rem; text-align:center; line-height:1.15; }
+.wcam-frame-chip strong { font-size:.78rem; text-align:center; line-height:1.15; }
+
+.wcam-frame-drag-ghost {
+  position:fixed;
+  top:0; left:0;
+  z-index:2147483000;
+  pointer-events:none;
+  transform:translate(-50%,-50%) scale(1.06);
+  opacity:.94;
+  box-shadow:0 14px 34px rgba(0,0,0,.28);
+  border-radius:14px;
+}
+.wcam-review-card.is-drop-target { outline:3px solid var(--wcam-purple); outline-offset:2px; }
+.wcam-review-frame-badge {
+  display:inline-block;
+  margin:0 0 8px;
+  padding:3px 9px;
+  border-radius:999px;
+  background:#f0ecef;
+  font-size:.72rem;
+  font-weight:700;
+  color:var(--wcam-ink);
+  opacity:.8;
+}
 .wcam-closed { text-align:center; }
 .wcam-my-card .wcam-photo-media { aspect-ratio:1/1; }
 .wcam-my-card .wcam-photo-image { width:100%; height:100%; object-fit:cover; }
 .wcam-wall-card .wcam-photo-media { width:100%; }
-.wcam-feature-media { position:relative; overflow:hidden; }
-.wcam-feature-media .wcam-photo-image { max-width:min(78vw,1100px); max-height:72vh; width:auto; height:auto; object-fit:contain; }
-.wcam-feature-media .wcam-photo-frame { object-fit:fill; }
+/* A frame PNG is designed once, at one aspect ratio — so a framed photo
+   always gets cropped into that SAME square box everywhere, instead of the
+   frame stretching by a different amount depending on that photo's own
+   aspect ratio. Unframed photos keep their natural masonry/filmstrip look. */
+.wcam-wall-card:has(.wcam-photo-frame) .wcam-photo-media { aspect-ratio:1/1; }
+.wcam-wall-card:has(.wcam-photo-frame) .wcam-photo-image { height:100%; object-fit:cover; }
 
 
 /* v0.5 live camera capture */
@@ -377,18 +444,22 @@
   background:white;
   border:1px solid var(--wcam-line);
   border-radius:22px;
-  padding:16px;
+  padding:8px;
   margin-bottom:18px;
 }
 .wcam-camera-viewport {
   position:relative;
   width:100%;
-  aspect-ratio:3/4;
-  max-height:70vh;
+  aspect-ratio:9/16;
+  max-height:88vh;
   border-radius:16px;
   overflow:hidden;
   background:#151218;
 }
+/* Give the camera step more width to work with by shrinking the wizard's
+   own side padding while it's the active step — a bigger, more app-like
+   viewfinder instead of a small preview squeezed inside the card's margins. */
+.wcam-wizard:has(#wcam-step-camera:not([hidden])) { padding-left:10px; padding-right:10px; }
 .wcam-camera-viewport video {
   width:100%;
   height:100%;
@@ -409,8 +480,8 @@
   margin-top:14px;
 }
 .wcam-shutter {
-  width:66px;
-  height:66px;
+  width:76px;
+  height:76px;
   border-radius:999px;
   border:4px solid var(--wcam-line);
   background:white;
@@ -448,7 +519,15 @@
   line-height:1;
   cursor:pointer;
 }
-.wcam-camera-panel #wcam-camera-done { margin-top:14px; }
+.wcam-save-photos {
+  width:100%;
+  margin-top:14px;
+  border-radius:14px;
+  border:1px dashed var(--wcam-line);
+  background:var(--wcam-cream);
+  font-size:.88rem;
+}
+.wcam-camera-panel #wcam-camera-done { margin-top:10px; }
 
 @media (max-width:600px) {
   .wcam-capture-choices { flex-direction:column; }
@@ -495,4 +574,78 @@
     gap:0.3in;
   }
   .wcam-qr-card { box-shadow:none; break-inside:avoid; }
+}
+
+
+/* v0.6 scrolling-rows Live Wall layout */
+.wcam-wall-rows {
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  max-width:1800px;
+  margin:0 auto;
+}
+.wcam-wall-row {
+  overflow:hidden;
+  -webkit-mask-image:linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%);
+  mask-image:linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%);
+}
+.wcam-wall-row[hidden] { display:none; }
+.wcam-wall-track {
+  display:flex;
+  align-items:stretch;
+  gap:14px;
+  width:max-content;
+  will-change:transform;
+  transform:translateZ(0);
+  -webkit-animation-name:wcam-scroll-x;
+  -webkit-animation-timing-function:linear;
+  -webkit-animation-iteration-count:infinite;
+  -webkit-animation-duration:24s;
+  animation-name:wcam-scroll-x;
+  animation-timing-function:linear;
+  animation-iteration-count:infinite;
+  animation-duration:24s;
+}
+.wcam-wall-row:nth-child(even) .wcam-wall-track { -webkit-animation-direction:reverse; animation-direction:reverse; }
+.wcam-wall-row:hover .wcam-wall-track { animation-play-state:paused; }
+@keyframes wcam-scroll-x {
+  from { transform:translateX(0); }
+  to { transform:translateX(-50%); }
+}
+.wcam-wall-row-card {
+  flex:0 0 auto;
+  height:230px;
+  border-radius:16px;
+  overflow:hidden;
+  position:relative;
+  background:white;
+  box-shadow:0 10px 26px rgba(47,42,50,.10);
+}
+.wcam-wall-row-card .wcam-photo-media { height:100%; }
+.wcam-wall-row-card .wcam-photo-image { height:100%; width:auto; display:block; }
+.wcam-wall-row-card .wcam-photo-frame { height:100%; width:auto; object-fit:fill; }
+/* Same reasoning as the grid layout above: a framed row card becomes a
+   fixed square (matching the frame's own designed aspect ratio) instead of
+   stretching a different amount per photo. */
+.wcam-wall-row-card:has(.wcam-photo-frame) { aspect-ratio:1/1; width:auto; }
+.wcam-wall-row-card:has(.wcam-photo-frame) .wcam-photo-image { width:100%; height:100%; object-fit:cover; }
+.wcam-wall-row-card figcaption {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  z-index:3;
+  padding:20px 12px 10px;
+  font-size:.82rem;
+  color:#fff;
+  background:linear-gradient(to top, rgba(21,18,24,.78), transparent);
+}
+
+@media (max-width:700px) {
+  .wcam-wall-row-card { height:150px; }
+  .wcam-wall-rows { gap:10px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .wcam-wall-track { animation:none; }
+  .wcam-wall-row { overflow-x:auto; -webkit-mask-image:none; mask-image:none; }
 }

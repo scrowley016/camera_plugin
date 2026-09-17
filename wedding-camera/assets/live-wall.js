@@ -1,14 +1,16 @@
 (() => {
   const grid = document.getElementById("wcam-wall-grid");
+  const rowsContainer = document.getElementById("wcam-wall-rows");
   const empty = document.getElementById("wcam-wall-empty");
   const count = document.getElementById("wcam-photo-count");
-  const feature = document.getElementById("wcam-feature");
-  const featureImg = document.getElementById("wcam-feature-image");
-  const featureFrame = document.getElementById("wcam-feature-frame");
-  const featureCaption = document.getElementById("wcam-feature-caption");
-  if (!grid || typeof WeddingWall === "undefined") return;
+  const spotlight = document.getElementById("wcam-spotlight");
+  const spotlightImg = document.getElementById("wcam-spotlight-image");
+  const spotlightFrame = document.getElementById("wcam-spotlight-frame");
+  const spotlightCaption = document.getElementById("wcam-spotlight-caption");
+  if ((!grid && !rowsContainer) || typeof WeddingWall === "undefined") return;
 
   const known = new Set(); let currentPhotos = []; let lastFeatured = null;
+  const rowKeys = []; // last-rendered "id,id,id" string per row, to skip untouched rows
 
   function textFor(photo) {
     const pieces = [];
@@ -30,24 +32,109 @@
     return card;
   }
 
+  function makeRowCard(photo) {
+    const card = document.createElement("figure"); card.className = "wcam-wall-row-card"; card.appendChild(media(photo));
+    const text = textFor(photo); if (text) { const caption = document.createElement("figcaption"); caption.textContent = text; card.appendChild(caption); }
+    return card;
+  }
+
+  function shuffle(list) {
+    const arr = list.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  // Stable per-photo row assignment (based on the photo's own id, not its
+  // position in the list) so a photo always lands in the same scrolling row
+  // and doesn't jump between rows as new photos arrive ahead of it.
+  function bucketByRow(photos, rowCount) {
+    const buckets = Array.from({ length: rowCount }, () => []);
+    photos.forEach(photo => buckets[Number(photo.id) % rowCount].push(photo));
+    return buckets;
+  }
+
+  function renderRows(photos) {
+    const rowCount = Math.max(2, Math.min(5, Number(WeddingWall.rows) || 3));
+    const buckets = bucketByRow(photos, rowCount);
+    buckets.forEach((bucketPhotos, index) => {
+      // The "did this row change" key ignores order, so shuffling below never
+      // looks like a change and never restarts a row that's already correct.
+      const key = bucketPhotos.map(p => p.id).slice().sort().join(",");
+      if (rowKeys[index] === key) return; // nothing changed for this row, leave its animation running
+      rowKeys[index] = key;
+      const rowPhotos = shuffle(bucketPhotos);
+
+      let rowEl = rowsContainer.querySelector(`.wcam-wall-row[data-row="${index}"]`);
+      if (!rowEl) {
+        rowEl = document.createElement("div");
+        rowEl.className = "wcam-wall-row";
+        rowEl.dataset.row = String(index);
+        const track = document.createElement("div");
+        track.className = "wcam-wall-track";
+        rowEl.appendChild(track);
+        rowsContainer.appendChild(rowEl);
+      }
+
+      rowEl.hidden = rowPhotos.length === 0;
+      if (!rowPhotos.length) return;
+
+      const track = rowEl.querySelector(".wcam-wall-track");
+      track.innerHTML = "";
+      // Duplicate the row's content once so a 0%->-50% translateX loops seamlessly.
+      rowPhotos.forEach(photo => track.appendChild(makeRowCard(photo)));
+      rowPhotos.forEach(photo => track.appendChild(makeRowCard(photo)));
+      track.style.animationDuration = `${Math.max(14, rowPhotos.length * 4)}s`;
+    });
+  }
+
   function showFeature() {
-    if (!WeddingWall.featureEnabled || !feature || currentPhotos.length === 0 || !feature.hidden) return;
+    if (!WeddingWall.featureEnabled || !spotlight || currentPhotos.length === 0) return;
     let choices = currentPhotos.filter(p => String(p.id) !== String(lastFeatured)); if (!choices.length) choices = currentPhotos;
     const photo = choices[Math.floor(Math.random() * choices.length)]; if (!photo) return; lastFeatured = photo.id;
-    featureImg.src = photo.url || photo.thumbnail;
-    if (photo.frame_url) { featureFrame.src = photo.frame_url; featureFrame.hidden = false; } else { featureFrame.removeAttribute("src"); featureFrame.hidden = true; }
-    const text = textFor(photo); featureCaption.textContent = text; featureCaption.hidden = !text;
-    feature.hidden = false; feature.setAttribute("aria-hidden", "false"); requestAnimationFrame(() => feature.classList.add("is-visible"));
-    setTimeout(() => { feature.classList.remove("is-visible"); setTimeout(() => { feature.hidden = true; feature.setAttribute("aria-hidden", "true"); }, 700); }, 7000);
+
+    const applyPhoto = () => {
+      spotlightImg.src = photo.url || photo.thumbnail;
+      if (photo.frame_url) { spotlightFrame.src = photo.frame_url; spotlightFrame.hidden = false; } else { spotlightFrame.removeAttribute("src"); spotlightFrame.hidden = true; }
+      spotlightCaption.textContent = textFor(photo);
+    };
+
+    if (spotlight.hidden) {
+      // First photo: show immediately, no fade-out-then-in needed.
+      spotlight.hidden = false;
+      applyPhoto();
+      return;
+    }
+
+    // Already showing something: crossfade to the new photo instead of a
+    // blocking modal — the rest of the page is never covered or dimmed.
+    spotlight.classList.add("is-fading");
+    setTimeout(() => { applyPhoto(); spotlight.classList.remove("is-fading"); }, 400);
   }
 
   async function refresh() {
     try {
       const response = await fetch(`${WeddingWall.liveUrl}?_=${Date.now()}`, { cache: "no-store" }); if (!response.ok) return;
       const data = await response.json(); const photos = Array.isArray(data.photos) ? data.photos : []; currentPhotos = photos; if (count) count.textContent = String(photos.length);
-      const liveIds = new Set(photos.map(p => String(p.id)));
-      grid.querySelectorAll("[data-id]").forEach(el => { if (!liveIds.has(String(el.dataset.id))) { known.delete(String(el.dataset.id)); el.classList.add("is-leaving"); setTimeout(() => el.remove(), 350); } });
-      photos.slice().reverse().forEach(photo => { const id = String(photo.id); if (!known.has(id)) { known.add(id); grid.prepend(makeCard(photo)); } });
+      if (spotlight && spotlight.hidden && photos.length) showFeature();
+      if (rowsContainer) {
+        renderRows(photos);
+      } else if (grid) {
+        const liveIds = new Set(photos.map(p => String(p.id)));
+        grid.querySelectorAll("[data-id]").forEach(el => { if (!liveIds.has(String(el.dataset.id))) { known.delete(String(el.dataset.id)); el.classList.add("is-leaving"); setTimeout(() => el.remove(), 350); } });
+        shuffle(photos).forEach(photo => {
+          const id = String(photo.id);
+          if (known.has(id)) return;
+          known.add(id);
+          // Insert at a random position (rather than always at the front) so
+          // the wall reads as shuffled instead of strictly newest-first.
+          const children = grid.children;
+          const at = children.length ? Math.floor(Math.random() * (children.length + 1)) : 0;
+          grid.insertBefore(makeCard(photo), children[at] || null);
+        });
+      }
       empty.hidden = photos.length > 0;
     } catch (_) {}
   }
