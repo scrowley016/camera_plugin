@@ -1,4 +1,4 @@
-# Wedding Camera v0.7.0
+# Wedding Camera v0.7.1
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -20,12 +20,14 @@ Controls:
 - Add/remove/rename up to 12 frame overlays from the WordPress Media Library
 
 ### Canva frame workflow
-1. Create a frame in Canva.
-2. Leave the center/background transparent so the photo can show through.
-3. Export as PNG with transparency.
+1. In Canva, create a **custom size design at exactly 1080 × 1080 px (square)**.
+2. Leave the center transparent so the photo can show through.
+3. Export as **PNG with transparent background**.
 4. Upload it under Wedding Camera → Settings & Frames → Add Canva Frame.
 5. Give it a guest-friendly name such as Woodland, Polaroid, Just Married, Disco, etc.
 6. Save settings.
+
+Every framed photo across the whole plugin (guest review screen, Live Wall, My Photos, admin) is cropped into this same 1080×1080 square before the frame is applied, so a frame built at this exact size will line up correctly everywhere — no more guessing at proportions.
 
 Guests will then see No Frame plus your frame choices on the camera page.
 
@@ -59,7 +61,7 @@ Optional Live Wall attributes remain supported:
 `[wedding_photo_wall camera_url="https://example.com/camera" qr_image="https://example.com/qr.png" eyebrow="Shannon + Alex" title="The Wedding Through Your Eyes" date="10 · 16 · 26"]`
 
 ## Frame design note
-Because guests may upload portrait, landscape, and square photos, decorative edge frames work best. Avoid designs that depend on one exact crop or place critical text very close to the center.
+Because every framed photo is cropped to fill a square, decorative edge frames work best — keep important artwork within about the outer 8% border and avoid anything that depends on one exact photo crop. A wide landscape or tall portrait photo will have its longer side trimmed slightly to fit the square, same as most social apps.
 
 
 ## v0.4
@@ -143,3 +145,12 @@ Uploading many photos (e.g. 12 at once) was slow for two reasons, both fixed:
 
 ### Live Wall motion on mobile
 If the scrolling rows still don't appear to move on a specific phone, the most common cause is that phone's **Reduce Motion** accessibility setting (Settings → Accessibility → Motion on iOS) — the plugin deliberately respects it and falls back to a manually-scrollable strip, since that's the right thing to do for anyone who's turned it on for a real reason. Turning it off on that device confirms whether that's the cause. Independently, this release also tightens the default scroll speed and adds a few mobile-Safari-specific CSS properties for reliability.
+
+## v0.7.1
+
+- Removed "(optional)" from the name field — it reads cleaner and the field was already optional.
+- The guest's name is now remembered on their device (localStorage) after their first upload, so returning to `[wedding_camera]` later — especially the common case of one phone uploading several batches over the course of the wedding — has it pre-filled instead of asking again.
+- **Fixed the frame picker going off-screen on iPhone instead of scrolling in place.** Root cause: `<fieldset>` elements have a browser-default sizing quirk where they refuse to shrink below their content's natural width, so a wide row of frame options pushed the whole page wider than the screen instead of scrolling contained within its own box.
+- **Frames can now be assigned per photo, by drag-and-drop (or tap-then-tap on a small screen).** The review step shows a row of frame chips above the photo grid — drag one onto any photo, or tap a frame then tap a photo to apply it. Each photo can have its own frame or none at all.
+- **Fixed frames rendering inconsistently across the site** — the actual root cause of "frames seem a little off." Several places had a generic image-sizing CSS rule that unintentionally also applied to the frame overlay itself, silently cropping or shrinking the frame art differently in different contexts (My Photos, the Live Wall, the admin Photos screen) even though it looked correct in the guest's own review screen. Every framed photo is now consistently cropped into the same square before the frame is applied, everywhere the plugin shows one.
+- **Exact Canva frame size: 1080 × 1080 px, square, transparent PNG.** Every framed photo across the whole plugin is now cropped into this exact square before the frame is applied, so a frame built at this size will line up correctly everywhere (guest review screen, Live Wall, My Photos, admin). Keep important artwork within about the outer 8% border, since the longer side of non-square photos gets trimmed slightly to fit — same as most social apps.

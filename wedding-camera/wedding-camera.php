@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.7.0
+ * Version: 0.7.1
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.7.0' );
+define( 'WCAM_VERSION', '0.7.1' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -457,7 +457,7 @@ HTML;
                 <section class="wcam-step" id="wcam-step-name" data-step="name">
                     <h2>What's your name?</h2>
                     <p class="wcam-step-help">So we know who to thank ✨</p>
-                    <input id="wcam-name" class="wcam-name-input" type="text" maxlength="80" autocomplete="name" placeholder="Your name (optional)">
+                    <input id="wcam-name" class="wcam-name-input" type="text" maxlength="80" autocomplete="name" placeholder="Your name">
                     <button type="button" class="wcam-submit wcam-step-next" data-goto="method">Continue</button>
                 </section>
 
@@ -496,19 +496,17 @@ HTML;
 
                     <?php if ( ! empty( $frames ) ) : ?>
                     <fieldset class="wcam-frame-picker" id="wcam-frame-picker">
-                        <legend>Add a frame <small>(optional)</small></legend>
-                        <p class="wcam-frame-help">Your original photo stays untouched — the frame can be changed later.</p>
+                        <legend>Frames <small>(optional)</small></legend>
+                        <p class="wcam-frame-help">Drag a frame onto a photo below — or tap a frame, then tap a photo. Your original photo stays untouched.</p>
                         <div class="wcam-frame-options">
-                            <label class="wcam-frame-option is-selected">
-                                <input type="radio" name="wcam_frame" value="0" checked>
+                            <button type="button" class="wcam-frame-chip" data-frame-id="0" data-frame-url="">
                                 <span class="wcam-frame-none">No Frame</span>
-                            </label>
+                            </button>
                             <?php foreach ( $frames as $frame ) : ?>
-                            <label class="wcam-frame-option">
-                                <input type="radio" name="wcam_frame" value="<?php echo esc_attr( $frame['id'] ); ?>" data-frame-url="<?php echo esc_url( $frame['url'] ); ?>">
+                            <button type="button" class="wcam-frame-chip" data-frame-id="<?php echo esc_attr( $frame['id'] ); ?>" data-frame-url="<?php echo esc_url( $frame['url'] ); ?>">
                                 <span class="wcam-frame-thumb"><img src="<?php echo esc_url( $frame['url'] ); ?>" alt=""></span>
                                 <strong><?php echo esc_html( $frame['label'] ); ?></strong>
-                            </label>
+                            </button>
                             <?php endforeach; ?>
                         </div>
                     </fieldset>
@@ -766,7 +764,7 @@ HTML;
                 <section class="wcam-settings-card">
                     <h2>Guest Frames</h2>
                     <label class="wcam-setting-toggle"><input type="checkbox" name="frames_enabled" value="1" <?php checked( $s['frames_enabled'], '1' ); ?>><span><strong>Let guests add frames</strong><small>Frames are saved as overlays, not baked into the original photo.</small></span></label>
-                    <p><strong>Canva tip:</strong> export each frame as a PNG with a transparent center/background. Keep important decoration near the edges.</p>
+                    <p><strong>Canva size:</strong> create a <strong>1080 × 1080 px square</strong> design (Canva → Custom size), keep the center transparent, and export as <strong>PNG with transparent background</strong>. Every framed photo on the site is cropped into this same square, so a frame designed at this exact size will always line up correctly. Keep important decoration within about 8% of each edge, since guest photos are cropped to fill the square and may trim a sliver off the longer side.</p>
                     <div id="wcam-frame-rows" class="wcam-frame-rows">
                         <?php foreach ( $frames as $frame ) : ?>
                         <div class="wcam-frame-row">

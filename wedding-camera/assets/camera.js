@@ -2,10 +2,13 @@
   const mySection = document.getElementById("wcam-my-photos");
   const myGrid = document.getElementById("wcam-my-photo-grid");
   const storageKey = "weddingCameraUploadsV1";
+  const nameStorageKey = "weddingCameraGuestNameV1";
   if (typeof WeddingCamera === "undefined") return;
 
   const getMine = () => { try { return JSON.parse(localStorage.getItem(storageKey) || "[]"); } catch { return []; } };
   const saveMine = items => localStorage.setItem(storageKey, JSON.stringify(items));
+  const getSavedName = () => { try { return localStorage.getItem(nameStorageKey) || ""; } catch { return ""; } };
+  const saveName = value => { try { localStorage.setItem(nameStorageKey, value); } catch {} };
 
   function framedMedia(imageUrl, frameUrl, alt = "") {
     const wrap = document.createElement("div");
@@ -66,9 +69,13 @@
   });
 
   const nameInput = document.getElementById("wcam-name");
-  nameInput?.addEventListener("keydown", event => {
-    if (event.key === "Enter") { event.preventDefault(); goToStep("method"); }
-  });
+  if (nameInput) {
+    nameInput.value = getSavedName();
+    nameInput.addEventListener("input", () => saveName(nameInput.value));
+    nameInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); goToStep("method"); }
+    });
+  }
 
   const filesInput = document.getElementById("wcam-files");
   const reviewGrid = document.getElementById("wcam-review-grid");
@@ -76,29 +83,26 @@
   const finalSubmit = document.getElementById("wcam-final-submit");
   const addMoreBtn = document.getElementById("wcam-add-more");
 
-  let items = []; // { blob, name, previewUrl, caption }
+  let items = []; // { blob, name, previewUrl, caption, frameId, frameUrl }
 
-  function selectedFrame() {
-    const input = wizard.querySelector('input[name="wcam_frame"]:checked');
-    return { id: input ? Number(input.value || 0) : 0, url: input?.dataset?.frameUrl || "" };
-  }
-
-  wizard.querySelectorAll('input[name="wcam_frame"]').forEach(input => input.addEventListener("change", () => {
-    wizard.querySelectorAll(".wcam-frame-option").forEach(label => label.classList.toggle("is-selected", label.contains(input) && input.checked));
-    renderReview();
-  }));
+  const frameLabelById = new Map((WeddingCamera.frames || []).map(f => [Number(f.id), f.label]));
+  function frameLabel(frameId) { return frameId ? (frameLabelById.get(Number(frameId)) || "Frame") : "No Frame"; }
 
   function addItems(newItems) {
-    items = items.concat(newItems);
+    items = items.concat(newItems.map(item => ({ frameId: 0, frameUrl: "", ...item })));
   }
 
   function renderReview() {
     if (!reviewGrid) return;
     reviewGrid.innerHTML = "";
-    const frame = selectedFrame();
     items.forEach((item, index) => {
       const card = document.createElement("div"); card.className = "wcam-review-card";
-      card.appendChild(framedMedia(item.previewUrl, frame.url, "Selected photo preview"));
+      card.dataset.index = String(index);
+      card.appendChild(framedMedia(item.previewUrl, item.frameUrl, "Selected photo preview"));
+      const badge = document.createElement("span");
+      badge.className = "wcam-review-frame-badge";
+      badge.textContent = frameLabel(item.frameId);
+      card.appendChild(badge);
       const caption = document.createElement("input");
       caption.type = "text"; caption.maxLength = 240; caption.placeholder = "Add a caption (optional)";
       caption.className = "wcam-review-caption";
@@ -107,15 +111,99 @@
       card.appendChild(caption);
       const remove = document.createElement("button");
       remove.type = "button"; remove.className = "wcam-review-remove"; remove.setAttribute("aria-label", "Remove this photo"); remove.textContent = "×";
-      remove.addEventListener("click", () => {
+      remove.addEventListener("click", event => {
+        event.stopPropagation();
         URL.revokeObjectURL(item.previewUrl);
         items.splice(index, 1);
         renderReview();
       });
       card.appendChild(remove);
+      // Tap-to-assign fallback: if a frame chip is "active" (tapped, not
+      // dragged), tapping a photo applies it — friendlier than dragging on
+      // a small screen.
+      card.addEventListener("click", () => {
+        if (!activeChipFrame) return;
+        item.frameId = activeChipFrame.id;
+        item.frameUrl = activeChipFrame.url;
+        renderReview();
+      });
       reviewGrid.appendChild(card);
     });
   }
+
+  // ---- Frame palette: drag a chip onto a photo, or tap-then-tap ----
+  const framePalette = document.getElementById("wcam-frame-picker");
+  let activeChipFrame = null; // { id, url } selected via tap, for the tap-to-assign fallback
+
+  function setActiveChip(chip) {
+    framePalette?.querySelectorAll(".wcam-frame-chip").forEach(c => c.classList.remove("is-active"));
+    if (chip) chip.classList.add("is-active");
+  }
+
+  function cardAtPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest(".wcam-review-card") : null;
+  }
+
+  function assignFrameToCard(card, frameId, frameUrl) {
+    const index = Number(card.dataset.index);
+    if (Number.isNaN(index) || !items[index]) return;
+    items[index].frameId = frameId;
+    items[index].frameUrl = frameUrl;
+    renderReview();
+  }
+
+  framePalette?.querySelectorAll(".wcam-frame-chip").forEach(chip => {
+    const frameId = Number(chip.dataset.frameId || 0);
+    const frameUrl = chip.dataset.frameUrl || "";
+
+    chip.addEventListener("click", () => {
+      if (activeChipFrame && activeChipFrame.id === frameId) { activeChipFrame = null; setActiveChip(null); return; }
+      activeChipFrame = { id: frameId, url: frameUrl };
+      setActiveChip(chip);
+    });
+
+    chip.addEventListener("pointerdown", event => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      const startX = event.clientX, startY = event.clientY;
+      let dragging = false;
+      let ghost = null;
+
+      function moveGhost(x, y) {
+        if (ghost) { ghost.style.left = `${x}px`; ghost.style.top = `${y}px`; }
+      }
+
+      function onMove(moveEvent) {
+        if (!dragging) {
+          if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 8) return;
+          dragging = true;
+          ghost = chip.cloneNode(true);
+          ghost.classList.add("wcam-frame-drag-ghost");
+          document.body.appendChild(ghost);
+        }
+        moveGhost(moveEvent.clientX, moveEvent.clientY);
+        reviewGrid?.querySelectorAll(".wcam-review-card").forEach(c => c.classList.remove("is-drop-target"));
+        const target = cardAtPoint(moveEvent.clientX, moveEvent.clientY);
+        if (target) target.classList.add("is-drop-target");
+      }
+
+      function onUp(upEvent) {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        if (ghost) ghost.remove();
+        reviewGrid?.querySelectorAll(".wcam-review-card").forEach(c => c.classList.remove("is-drop-target"));
+        if (dragging) {
+          const target = cardAtPoint(upEvent.clientX, upEvent.clientY);
+          if (target) assignFrameToCard(target, frameId, frameUrl);
+        }
+      }
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+    });
+  });
 
   filesInput?.addEventListener("change", () => {
     const files = Array.from(filesInput.files || []);
@@ -233,7 +321,6 @@
 
   async function uploadAll(uploadItems) {
     const name = nameInput ? nameInput.value : "";
-    const frame = selectedFrame();
     const total = uploadItems.length;
     const results = new Array(total);
     let completed = 0;
@@ -245,7 +332,7 @@
       body.append("photo", resized, item.name || `photo-${index}.jpg`);
       body.append("guest_name", name);
       body.append("caption", item.caption || "");
-      body.append("frame_id", String(frame.id));
+      body.append("frame_id", String(item.frameId || 0));
       const response = await fetch(WeddingCamera.uploadUrl, { method: "POST", body });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "One of the photos could not be uploaded.");
