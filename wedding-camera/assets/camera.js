@@ -113,140 +113,114 @@
   }
 
   const filesInput = document.getElementById("wcam-files");
-  const reviewGrid = document.getElementById("wcam-review-grid");
+  const galleryGrid = document.getElementById("wcam-gallery-grid");
   const status = document.getElementById("wcam-status");
-  const finalSubmit = document.getElementById("wcam-final-submit");
-  const addMoreBtn = document.getElementById("wcam-add-more");
 
-  let items = []; // { blob, name, previewUrl, caption, frameId, frameUrl }
-
-  const frameLabelById = new Map((WeddingCamera.frames || []).map(f => [Number(f.id), f.label]));
-  function frameLabel(frameId) { return frameId ? (frameLabelById.get(Number(frameId)) || "Frame") : "No Frame"; }
-
-  function addItems(newItems) {
-    items = items.concat(newItems.map(item => ({ frameId: 0, frameUrl: "", ...item })));
-  }
-
-  function renderReview() {
-    if (!reviewGrid) return;
-    reviewGrid.innerHTML = "";
-    items.forEach((item, index) => {
-      const card = document.createElement("div"); card.className = "wcam-review-card";
-      card.dataset.index = String(index);
-      card.appendChild(framedMedia(item.previewUrl, item.frameUrl, "Selected photo preview"));
-      const badge = document.createElement("span");
-      badge.className = "wcam-review-frame-badge";
-      badge.textContent = frameLabel(item.frameId);
-      card.appendChild(badge);
-      const caption = document.createElement("input");
-      caption.type = "text"; caption.maxLength = 240; caption.placeholder = "Add a caption (optional)";
-      caption.className = "wcam-review-caption";
-      caption.value = item.caption;
-      caption.addEventListener("input", () => { item.caption = caption.value; });
-      card.appendChild(caption);
-      const remove = document.createElement("button");
-      remove.type = "button"; remove.className = "wcam-review-remove"; remove.setAttribute("aria-label", "Remove this photo"); remove.textContent = "×";
-      remove.addEventListener("click", event => {
-        event.stopPropagation();
-        URL.revokeObjectURL(item.previewUrl);
-        items.splice(index, 1);
-        renderReview();
-      });
-      card.appendChild(remove);
-      // Tap-to-assign fallback: if a frame chip is "active" (tapped, not
-      // dragged), tapping a photo applies it — friendlier than dragging on
-      // a small screen.
-      card.addEventListener("click", () => {
-        if (!activeChipFrame) return;
-        item.frameId = activeChipFrame.id;
-        item.frameUrl = activeChipFrame.url;
-        renderReview();
-      });
-      reviewGrid.appendChild(card);
+  // ---- Faster uploads: shrink each photo client-side before sending it ----
+  function resizeForUpload(blob, maxDim = 2400, quality = 0.86) {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        if (scale >= 1) { URL.revokeObjectURL(url); resolve(blob); return; }
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(resized => { URL.revokeObjectURL(url); resolve(resized || blob); }, "image/jpeg", quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
+      img.src = url;
     });
   }
 
-  // ---- Frame palette: drag a chip onto a photo, or tap-then-tap ----
-  const framePalette = document.getElementById("wcam-frame-picker");
-  let activeChipFrame = null; // { id, url } selected via tap, for the tap-to-assign fallback
-
-  function setActiveChip(chip) {
-    framePalette?.querySelectorAll(".wcam-frame-chip").forEach(c => c.classList.remove("is-active"));
-    if (chip) chip.classList.add("is-active");
+  // ---- Everything uploads itself the instant it's taken or picked — no
+  // review/submit step. A small persistent queue (3 at a time) runs in the
+  // background regardless of which step is on screen; each photo's card
+  // shows its own status (uploading / done / failed-tap-to-retry). ----
+  let toastTimer = null;
+  function showToast(message) {
+    if (!status) return;
+    status.textContent = message;
+    status.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { status.hidden = true; }, 4000);
   }
 
-  function cardAtPoint(x, y) {
-    const el = document.elementFromPoint(x, y);
-    return el ? el.closest(".wcam-review-card") : null;
+  const uploadQueue = [];
+  let activeUploads = 0;
+  const MAX_CONCURRENT_UPLOADS = 3;
+
+  function enqueueUpload(task) {
+    task.status = "pending";
+    task.onStatus?.(task);
+    uploadQueue.push(task);
+    pumpQueue();
   }
 
-  function assignFrameToCard(card, frameId, frameUrl) {
-    const index = Number(card.dataset.index);
-    if (Number.isNaN(index) || !items[index]) return;
-    items[index].frameId = frameId;
-    items[index].frameUrl = frameUrl;
-    renderReview();
+  function pumpQueue() {
+    while (activeUploads < MAX_CONCURRENT_UPLOADS && uploadQueue.length) {
+      const task = uploadQueue.shift();
+      activeUploads++;
+      runUpload(task).finally(() => { activeUploads--; pumpQueue(); });
+    }
   }
 
-  framePalette?.querySelectorAll(".wcam-frame-chip").forEach(chip => {
-    const frameId = Number(chip.dataset.frameId || 0);
-    const frameUrl = chip.dataset.frameUrl || "";
+  async function runUpload(task) {
+    task.status = "uploading";
+    task.onStatus?.(task);
+    try {
+      const resized = await resizeForUpload(task.blob);
+      const body = new FormData();
+      body.append("photo", resized, task.name);
+      body.append("guest_name", nameInput ? nameInput.value : "");
+      body.append("caption", "");
+      body.append("frame_id", String(task.frameId || 0));
+      const response = await fetch(WeddingCamera.uploadUrl, { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Upload failed.");
+      task.status = "done";
+      saveMine([{ id: data.id, token: data.token, live: data.live, thumbnail: data.thumbnail, frame_id: data.frame_id, frame_url: data.frame_url }, ...getMine()].slice(0, 250));
+      renderMine();
+      showToast(WeddingCamera.successSingle || "✨ We got it! Your photo is in the wedding album.");
+    } catch (err) {
+      task.status = "error";
+      task.errorMessage = err.message || "Could not upload.";
+      showToast("⚠️ A photo couldn't upload — tap it to try again.");
+    }
+    task.onStatus?.(task);
+  }
 
-    chip.addEventListener("click", () => {
-      if (activeChipFrame && activeChipFrame.id === frameId) { activeChipFrame = null; setActiveChip(null); return; }
-      activeChipFrame = { id: frameId, url: frameUrl };
-      setActiveChip(chip);
-    });
+  function attachStatusBadge(card, task) {
+    const badge = document.createElement("span");
+    badge.className = "wcam-upload-status";
+    card.appendChild(badge);
+    task.onStatus = t => {
+      badge.className = "wcam-upload-status wcam-upload-status-" + t.status;
+      badge.textContent = t.status === "uploading" || t.status === "pending" ? "⏳" : t.status === "done" ? "✅" : t.status === "error" ? "⚠️" : "";
+      badge.title = t.status === "error" ? "Tap to try again" : "";
+    };
+    task.onStatus(task);
+    card.addEventListener("click", () => { if (task.status === "error") enqueueUpload(task); });
+  }
 
-    chip.addEventListener("pointerdown", event => {
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      const startX = event.clientX, startY = event.clientY;
-      let dragging = false;
-      let ghost = null;
-
-      function moveGhost(x, y) {
-        if (ghost) { ghost.style.left = `${x}px`; ghost.style.top = `${y}px`; }
-      }
-
-      function onMove(moveEvent) {
-        if (!dragging) {
-          if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 8) return;
-          dragging = true;
-          ghost = chip.cloneNode(true);
-          ghost.classList.add("wcam-frame-drag-ghost");
-          document.body.appendChild(ghost);
-        }
-        moveGhost(moveEvent.clientX, moveEvent.clientY);
-        reviewGrid?.querySelectorAll(".wcam-review-card").forEach(c => c.classList.remove("is-drop-target"));
-        const target = cardAtPoint(moveEvent.clientX, moveEvent.clientY);
-        if (target) target.classList.add("is-drop-target");
-      }
-
-      function onUp(upEvent) {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("pointercancel", onUp);
-        if (ghost) ghost.remove();
-        reviewGrid?.querySelectorAll(".wcam-review-card").forEach(c => c.classList.remove("is-drop-target"));
-        if (dragging) {
-          const target = cardAtPoint(upEvent.clientX, upEvent.clientY);
-          if (target) assignFrameToCard(target, frameId, frameUrl);
-        }
-      }
-
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("pointercancel", onUp);
-    });
-  });
+  let taskCounter = 0;
 
   filesInput?.addEventListener("change", () => {
     const files = Array.from(filesInput.files || []);
     if (!files.length) return;
-    addItems(files.map(file => ({ blob: file, name: file.name, previewUrl: URL.createObjectURL(file), caption: "" })));
     filesInput.value = "";
-    renderReview();
-    goToStep("review");
+    files.forEach(file => {
+      const task = { id: ++taskCounter, blob: file, name: file.name, previewUrl: URL.createObjectURL(file), frameId: 0, frameUrl: "" };
+      if (galleryGrid) {
+        const card = document.createElement("div"); card.className = "wcam-review-card";
+        card.appendChild(framedMedia(task.previewUrl, task.frameUrl, "Selected photo"));
+        attachStatusBadge(card, task);
+        galleryGrid.appendChild(card);
+      }
+      enqueueUpload(task);
+    });
   });
 
   // ---- Live in-browser camera capture ----
@@ -310,7 +284,10 @@
       goToStep("camera");
       document.body.style.overflow = "hidden";
       setActiveCameraFrame(0, ""); // start fresh each time the camera opens
-      renderShots();
+      cameraShots = [];
+      cameraShotsEl.innerHTML = "";
+      cameraDoneBtn.hidden = true;
+      if (cameraSaveBtn) cameraSaveBtn.hidden = true;
       startStream();
     }
     function closeCamera() {
@@ -338,28 +315,26 @@
       const shotFrame = activeCameraFrame;
       cameraCanvas.toBlob(blob => {
         if (!blob) return;
-        cameraShots.push({ blob, url: URL.createObjectURL(blob), frameId: shotFrame.id, frameUrl: shotFrame.url });
-        renderShots();
+        const shot = { blob, url: URL.createObjectURL(blob) };
+        cameraShots.push(shot);
+        const task = { id: ++taskCounter, blob, name: `camera-${Date.now()}.jpg`, previewUrl: shot.url, frameId: shotFrame.id, frameUrl: shotFrame.url };
+        renderShotCard(task);
+        enqueueUpload(task);
       }, "image/jpeg", 0.92);
     });
 
-    function renderShots() {
-      cameraShotsEl.innerHTML = "";
-      cameraShots.forEach((shot, index) => {
-        const item = document.createElement("div"); item.className = "wcam-camera-shot";
-        item.appendChild(framedMedia(shot.url, shot.frameUrl, `Captured photo ${index + 1}`));
-        const remove = document.createElement("button"); remove.type = "button"; remove.className = "wcam-camera-shot-remove"; remove.setAttribute("aria-label", "Remove this photo"); remove.textContent = "×";
-        remove.addEventListener("click", () => { URL.revokeObjectURL(shot.url); cameraShots.splice(index, 1); renderShots(); });
-        item.appendChild(remove);
-        cameraShotsEl.appendChild(item);
-      });
-      cameraDoneBtn.hidden = cameraShots.length === 0;
-      if (cameraSaveBtn) cameraSaveBtn.hidden = cameraShots.length === 0;
+    function renderShotCard(task) {
+      const item = document.createElement("div"); item.className = "wcam-camera-shot";
+      item.appendChild(framedMedia(task.previewUrl, task.frameUrl, "Captured photo"));
+      attachStatusBadge(item, task);
+      cameraShotsEl.appendChild(item);
+      cameraDoneBtn.hidden = false;
+      if (cameraSaveBtn) cameraSaveBtn.hidden = false;
     }
 
     // Saves the just-taken photos to the guest's own device (Photos/camera
-    // roll on a phone, via the native share sheet) BEFORE upload, so a
-    // network or site hiccup during upload can never lose the actual shots.
+    // roll on a phone, via the native share sheet) — belt-and-suspenders
+    // alongside the automatic upload, in case of a network or site issue.
     async function saveShotsToPhotos() {
       if (!cameraShots.length) return;
       const files = cameraShots.map((shot, index) => new File([shot.blob], `wedding-photo-${Date.now()}-${index}.jpg`, { type: "image/jpeg" }));
@@ -386,101 +361,8 @@
 
     cameraSaveBtn?.addEventListener("click", saveShotsToPhotos);
 
-    cameraDoneBtn?.addEventListener("click", () => {
-      if (!cameraShots.length) return;
-      addItems(cameraShots.map((shot, index) => ({
-        blob: shot.blob,
-        name: `camera-${Date.now()}-${index}.jpg`,
-        previewUrl: shot.url,
-        caption: "",
-        frameId: shot.frameId,
-        frameUrl: shot.frameUrl,
-      })));
-      cameraShots = [];
-      renderShots();
-      stopStream();
-      document.body.style.overflow = "";
-      renderReview();
-      goToStep("review");
-    });
+    // Photos already uploaded themselves as they were taken — "Done" (and
+    // the ✕ button) just close the camera, nothing left to do.
+    cameraDoneBtn?.addEventListener("click", closeCamera);
   }
-
-  // ---- Faster uploads: shrink each photo client-side before sending it ----
-  function resizeForUpload(blob, maxDim = 2400, quality = 0.86) {
-    return new Promise(resolve => {
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        if (scale >= 1) { URL.revokeObjectURL(url); resolve(blob); return; }
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(resized => { URL.revokeObjectURL(url); resolve(resized || blob); }, "image/jpeg", quality);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
-      img.src = url;
-    });
-  }
-
-  async function uploadAll(uploadItems) {
-    const name = nameInput ? nameInput.value : "";
-    const total = uploadItems.length;
-    const results = new Array(total);
-    let completed = 0;
-    status.textContent = `Uploading 0 of ${total}…`;
-
-    async function uploadOne(item, index) {
-      const resized = await resizeForUpload(item.blob);
-      const body = new FormData();
-      body.append("photo", resized, item.name || `photo-${index}.jpg`);
-      body.append("guest_name", name);
-      body.append("caption", item.caption || "");
-      body.append("frame_id", String(item.frameId || 0));
-      const response = await fetch(WeddingCamera.uploadUrl, { method: "POST", body });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "One of the photos could not be uploaded.");
-      completed++;
-      status.textContent = `Uploading ${completed} of ${total}…`;
-      results[index] = { id: data.id, token: data.token, live: data.live, thumbnail: data.thumbnail, frame_id: data.frame_id, frame_url: data.frame_url };
-    }
-
-    const queue = uploadItems.map((item, index) => ({ item, index }));
-    const concurrency = Math.min(3, total);
-    async function worker() {
-      let next;
-      while ((next = queue.shift())) {
-        await uploadOne(next.item, next.index);
-      }
-    }
-    await Promise.all(Array.from({ length: concurrency }, worker));
-    return results.filter(Boolean);
-  }
-
-  finalSubmit?.addEventListener("click", async () => {
-    if (!items.length) return;
-    finalSubmit.disabled = true;
-    if (addMoreBtn) addMoreBtn.disabled = true;
-    const batch = items;
-    try {
-      const uploaded = await uploadAll(batch);
-      saveMine([...uploaded, ...getMine()].slice(0, 250));
-      status.textContent = batch.length === 1
-        ? (WeddingCamera.successSingle || "✨ We got it! Your photo is in the wedding album.")
-        : (WeddingCamera.successMulti || "✨ We got them! {count} photos are in the wedding album.").replace("{count}", String(batch.length));
-      batch.forEach(item => URL.revokeObjectURL(item.previewUrl));
-      items = [];
-      renderReview();
-      renderMine();
-      goToStep("method"); // ready to add another batch right away
-    } catch (err) {
-      status.textContent = err.message || "Something went wrong. Please try again.";
-    } finally {
-      finalSubmit.disabled = false;
-      if (addMoreBtn) addMoreBtn.disabled = false;
-    }
-  });
-
-  addMoreBtn?.addEventListener("click", () => goToStep("method"));
 })();

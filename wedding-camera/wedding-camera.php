@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.8.0
+ * Version: 0.9.0
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.8.0' );
+define( 'WCAM_VERSION', '0.9.0' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -57,9 +57,7 @@ final class Wedding_Camera {
             'guest_title'          => 'Capture the Magic',
             'guest_intro'          => 'Share the wedding through your eyes.',
             'upload_button_text'   => '📸 Take or Choose Photos',
-            'submit_button_text'   => 'Add to Our Album',
             'success_single_text'  => '✨ We got it! Your photo is in the wedding album.',
-            'success_multi_text'   => '✨ We got them! {count} photos are in the wedding album.',
             'camera_page_url'      => '',
             'share_heading'        => 'Scan to Share Your Photos',
             'share_subtext'        => 'Add your photos to our Live Wall in seconds.',
@@ -427,7 +425,6 @@ HTML;
             'uploadsOpen'   => $settings['uploads_open'] === '1',
             'frames'        => $frames,
             'successSingle' => $settings['success_single_text'],
-            'successMulti'  => $settings['success_multi_text'],
         ];
 
         wp_enqueue_style( 'wcam' );
@@ -458,9 +455,8 @@ HTML;
                     <ol class="wcam-help-steps">
                         <li><span class="wcam-help-num">1</span><span>Type your name. You only have to do this once.</span></li>
                         <li><span class="wcam-help-num">2</span><span><strong>Take Photos</strong> uses your camera. <strong>Choose Photos</strong> picks from ones you already have.</span></li>
-                        <li><span class="wcam-help-num">3</span><span>Tap the big white circle to snap a photo. Take as many as you like.</span></li>
-                        <li><span class="wcam-help-num">4</span><span>Tap <strong>Use These Photos</strong> when you're finished taking pictures.</span></li>
-                        <li><span class="wcam-help-num">5</span><span>Tap the big button at the bottom to share your photos with us. That's it!</span></li>
+                        <li><span class="wcam-help-num">3</span><span>Tap the big white circle to snap a photo — it's added to our album automatically. No extra button to press!</span></li>
+                        <li><span class="wcam-help-num">4</span><span>Take as many as you like, then tap the ✕ or <strong>Done</strong> when you're finished. That's it!</span></li>
                     </ol>
                 </div>
             </div>
@@ -479,6 +475,7 @@ HTML;
 
                 <section class="wcam-step" id="wcam-step-method" data-step="method" hidden>
                     <h2>Add Photos</h2>
+                    <p class="wcam-step-help">Just tap a button below — your photos upload automatically. Nothing else to do!</p>
                     <div class="wcam-capture-choices">
                         <button type="button" id="wcam-open-camera" class="wcam-upload-button wcam-camera-trigger" hidden>
                             <span>📷 Take Photos</span>
@@ -488,6 +485,7 @@ HTML;
                             <input id="wcam-files" type="file" accept="image/*" multiple>
                         </label>
                     </div>
+                    <div id="wcam-gallery-grid" class="wcam-review-grid"></div>
                     <button type="button" class="wcam-step-back" data-goto="name">← Back</button>
                 </section>
 
@@ -529,39 +527,11 @@ HTML;
                     </div>
                     <div id="wcam-camera-shots" class="wcam-camera-shots"></div>
                     <button type="button" id="wcam-camera-save" class="wcam-mini-button wcam-save-photos" hidden>💾 Save to Photos (in case of issues)</button>
-                    <button type="button" id="wcam-camera-done" class="wcam-submit" hidden>Use These Photos</button>
-                </section>
-
-                <section class="wcam-step" id="wcam-step-review" data-step="review" hidden>
-                    <h2>Review Your Photos</h2>
-                    <p class="wcam-step-help">Add a caption to any photo, or skip and just upload.</p>
-
-                    <?php if ( ! empty( $frames ) ) : ?>
-                    <fieldset class="wcam-frame-picker" id="wcam-frame-picker">
-                        <legend>Frames <small>(optional)</small></legend>
-                        <p class="wcam-frame-help">Drag a frame onto a photo below — or tap a frame, then tap a photo. Your original photo stays untouched.</p>
-                        <div class="wcam-frame-options">
-                            <button type="button" class="wcam-frame-chip" data-frame-id="0" data-frame-url="">
-                                <span class="wcam-frame-none">No Frame</span>
-                            </button>
-                            <?php foreach ( $frames as $frame ) : ?>
-                            <button type="button" class="wcam-frame-chip" data-frame-id="<?php echo esc_attr( $frame['id'] ); ?>" data-frame-url="<?php echo esc_url( $frame['url'] ); ?>">
-                                <span class="wcam-frame-thumb"><img src="<?php echo esc_url( $frame['url'] ); ?>" alt=""></span>
-                                <strong><?php echo esc_html( $frame['label'] ); ?></strong>
-                            </button>
-                            <?php endforeach; ?>
-                        </div>
-                    </fieldset>
-                    <?php endif; ?>
-
-                    <div id="wcam-review-grid" class="wcam-review-grid"></div>
-
-                    <button type="button" class="wcam-upload-button wcam-add-more" id="wcam-add-more"><span>+ Add More Photos</span></button>
-                    <button type="button" class="wcam-submit" id="wcam-final-submit"><?php echo esc_html( $settings['submit_button_text'] ); ?></button>
-                    <p id="wcam-status" class="wcam-status" aria-live="polite"></p>
+                    <button type="button" id="wcam-camera-done" class="wcam-submit" hidden>✅ Done</button>
                 </section>
 
             </div>
+            <p id="wcam-status" class="wcam-upload-toast" aria-live="polite" hidden></p>
             <?php endif; ?>
 
             <section id="wcam-my-photos" class="wcam-my-photos" hidden>
@@ -779,9 +749,7 @@ HTML;
                     <label class="wcam-setting-row"><span>Main heading</span><input type="text" class="regular-text" name="guest_title" maxlength="120" value="<?php echo esc_attr( $s['guest_title'] ); ?>"></label>
                     <label class="wcam-setting-row"><span>Intro text</span><textarea class="large-text" rows="2" name="guest_intro" maxlength="300"><?php echo esc_textarea( $s['guest_intro'] ); ?></textarea></label>
                     <label class="wcam-setting-row"><span>Upload button</span><input type="text" class="regular-text" name="upload_button_text" maxlength="120" value="<?php echo esc_attr( $s['upload_button_text'] ); ?>"></label>
-                    <label class="wcam-setting-row"><span>Submit button</span><input type="text" class="regular-text" name="submit_button_text" maxlength="120" value="<?php echo esc_attr( $s['submit_button_text'] ); ?>"></label>
-                    <label class="wcam-setting-row"><span>Success message — one photo</span><input type="text" class="large-text" name="success_single_text" maxlength="220" value="<?php echo esc_attr( $s['success_single_text'] ); ?>"></label>
-                    <label class="wcam-setting-row"><span>Success message — multiple photos</span><input type="text" class="large-text" name="success_multi_text" maxlength="220" value="<?php echo esc_attr( $s['success_multi_text'] ); ?>"><small>Use <code>{count}</code> where you want the number of uploaded photos to appear.</small></label>
+                    <label class="wcam-setting-row"><span>Success message</span><input type="text" class="large-text" name="success_single_text" maxlength="220" value="<?php echo esc_attr( $s['success_single_text'] ); ?>"><small>Shown briefly each time one of a guest's photos finishes uploading.</small></label>
                 </section>
 
                 <section class="wcam-settings-card">
@@ -922,9 +890,7 @@ HTML;
             'guest_title'         => sanitize_text_field( wp_unslash( $_POST['guest_title'] ?? 'Capture the Magic' ) ),
             'guest_intro'         => sanitize_textarea_field( wp_unslash( $_POST['guest_intro'] ?? 'Share the wedding through your eyes.' ) ),
             'upload_button_text'  => sanitize_text_field( wp_unslash( $_POST['upload_button_text'] ?? '📸 Take or Choose Photos' ) ),
-            'submit_button_text'  => sanitize_text_field( wp_unslash( $_POST['submit_button_text'] ?? 'Add to Our Album' ) ),
             'success_single_text' => sanitize_text_field( wp_unslash( $_POST['success_single_text'] ?? '✨ We got it! Your photo is in the wedding album.' ) ),
-            'success_multi_text'  => sanitize_text_field( wp_unslash( $_POST['success_multi_text'] ?? '✨ We got them! {count} photos are in the wedding album.' ) ),
         ] );
         update_option( self::OPTION_SETTINGS, $settings, false );
 

@@ -1,4 +1,4 @@
-# Wedding Camera v0.8.0
+# Wedding Camera v0.9.0
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -170,3 +170,15 @@ A pass aimed squarely at "this only gets used on someone's phone at the wedding"
 - **Live, Snapchat-style frame preview while taking photos.** A frame picker now lives right on the camera screen — tap a frame and the app immediately shows a square guide with that frame composited over the live camera feed, so guests see exactly what they'll get *before* they tap the shutter. Taking a photo with a frame selected captures pre-cropped to match; "No Frame" still captures your normal full shot. Each photo remembers whichever frame was active when it was taken (still changeable afterward in Review).
 - **"My Photos" is now collapsed by default**, behind a "📷 Show My Pictures (N)" button, instead of always taking up space on the page below the upload form.
 - **The name step is now fully hidden — not just skipped — once a name is saved**, with no flash of the field before it's hidden. First-time guests still see it once.
+
+## v0.9.0
+
+**Photos now upload themselves — there's no longer a review or submit step at all.** Aimed squarely at "a lot of people who've been drinking, and guests who aren't very tech-savvy" — the goal is point, shoot (or pick), done.
+
+- Taking a photo with the camera, or picking photos from the gallery, uploads each one immediately in the background — no "Review your photos" screen, no caption step, no "Upload" button to remember to tap.
+- Each photo shows its own small status badge right on its thumbnail: ⏳ uploading, ✅ done, or ⚠️ tap-to-retry if something went wrong. A brief toast message ("✨ We got it!") confirms each one as it lands.
+- Up to 3 photos upload at once in the background, so guests can keep taking more photos while earlier ones are still finishing — no waiting around.
+- The camera's frame picker still works exactly as before (live Snapchat-style preview); whichever frame is showing when a photo is taken is the one that gets applied automatically.
+- Gallery-picked photos upload without a frame (frames are a live-camera feature) and without a caption — simplicity over completeness for this flow.
+- "💾 Save to Photos" still works the same as before, as a backup copy on the guest's own device.
+- Removed the caption field and drag-and-drop frame assignment from the guest flow (previously in the "Review" step) to eliminate the extra step entirely. Every uploaded photo can still be shown/hidden from the Live Wall afterward via "My Photos" or the admin Photos screen.
