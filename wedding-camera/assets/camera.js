@@ -52,9 +52,39 @@
       button.addEventListener("click", () => toggleMine(item.id, item.token, !item.live, button));
       card.appendChild(button); myGrid.appendChild(card);
     });
+    const toggleLabel = document.getElementById("wcam-my-photos-toggle-label");
+    const panel = document.getElementById("wcam-my-photos-panel");
+    if (toggleLabel && panel) {
+      toggleLabel.textContent = panel.hidden ? `📷 Show My Pictures (${mine.length})` : `📷 Hide My Pictures (${mine.length})`;
+    }
   }
 
   renderMine();
+
+  // ---- "How does this work?" help modal (works even if uploads are closed) ----
+  const helpBtn = document.getElementById("wcam-help-btn");
+  const helpModal = document.getElementById("wcam-help-modal");
+  const helpClose = document.getElementById("wcam-help-close");
+  const helpBackdrop = document.getElementById("wcam-help-backdrop");
+  if (helpBtn && helpModal) {
+    const openHelp = () => { helpModal.hidden = false; };
+    const closeHelp = () => { helpModal.hidden = true; };
+    helpBtn.addEventListener("click", openHelp);
+    helpClose?.addEventListener("click", closeHelp);
+    helpBackdrop?.addEventListener("click", closeHelp);
+  }
+
+  // ---- "My Photos" collapsed by default — expand on tap ----
+  const myPhotosToggle = document.getElementById("wcam-my-photos-toggle");
+  const myPhotosPanel = document.getElementById("wcam-my-photos-panel");
+  if (myPhotosToggle && myPhotosPanel) {
+    myPhotosToggle.addEventListener("click", () => {
+      const expanded = myPhotosPanel.hidden;
+      myPhotosPanel.hidden = !expanded;
+      myPhotosToggle.setAttribute("aria-expanded", String(expanded));
+      renderMine(); // refreshes the "Show/Hide My Pictures (N)" label to match
+    });
+  }
 
   const wizard = document.getElementById("wcam-wizard");
   if (!wizard) return;
@@ -71,11 +101,15 @@
   const nameInput = document.getElementById("wcam-name");
   if (nameInput) {
     nameInput.value = getSavedName();
-    if (nameInput.value) goToStep("method"); // already have it from a previous visit — go straight to photos
+    // Explicit first step either way (both start hidden server-side) so
+    // there's never a flash of the name field for a returning guest.
+    goToStep(nameInput.value ? "method" : "name");
     nameInput.addEventListener("input", () => saveName(nameInput.value));
     nameInput.addEventListener("keydown", event => {
       if (event.key === "Enter") { event.preventDefault(); goToStep("method"); }
     });
+  } else {
+    goToStep("name");
   }
 
   const filesInput = document.getElementById("wcam-files");
@@ -226,10 +260,14 @@
   const cameraShotsEl = document.getElementById("wcam-camera-shots");
   const cameraDoneBtn = document.getElementById("wcam-camera-done");
   const cameraSaveBtn = document.getElementById("wcam-camera-save");
+  const cameraFrameGuide = document.getElementById("wcam-camera-frame-guide");
+  const cameraFramePreview = document.getElementById("wcam-camera-frame-preview");
+  const cameraFrameChipsEl = document.getElementById("wcam-camera-frame-chips");
 
   let cameraStream = null;
   let facingMode = "environment";
-  let cameraShots = []; // { blob, url }
+  let cameraShots = []; // { blob, url, frameId, frameUrl }
+  let activeCameraFrame = { id: 0, url: "" }; // live-preview frame, Snapchat-style
 
   const cameraSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
@@ -253,8 +291,33 @@
       if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); cameraStream = null; }
     }
 
-    function openCamera() { goToStep("camera"); renderShots(); startStream(); }
-    function closeCamera() { stopStream(); goToStep("method"); }
+    function setActiveCameraFrame(id, url) {
+      activeCameraFrame = { id, url };
+      cameraFrameChipsEl?.querySelectorAll(".wcam-frame-chip").forEach(chip => {
+        chip.classList.toggle("is-active", Number(chip.dataset.frameId || 0) === id);
+      });
+      if (cameraFrameGuide) cameraFrameGuide.hidden = id === 0;
+      if (cameraFramePreview) cameraFramePreview.src = url || "";
+    }
+
+    cameraFrameChipsEl?.querySelectorAll(".wcam-frame-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        setActiveCameraFrame(Number(chip.dataset.frameId || 0), chip.dataset.frameUrl || "");
+      });
+    });
+
+    function openCamera() {
+      goToStep("camera");
+      document.body.style.overflow = "hidden";
+      setActiveCameraFrame(0, ""); // start fresh each time the camera opens
+      renderShots();
+      startStream();
+    }
+    function closeCamera() {
+      stopStream();
+      document.body.style.overflow = "";
+      goToStep("method");
+    }
 
     cameraCloseBtn?.addEventListener("click", closeCamera);
     cameraSwitchBtn?.addEventListener("click", () => { facingMode = facingMode === "environment" ? "user" : "environment"; startStream(); });
@@ -262,12 +325,20 @@
 
     cameraShutterBtn?.addEventListener("click", () => {
       if (!cameraVideo.videoWidth) return;
-      cameraCanvas.width = cameraVideo.videoWidth;
-      cameraCanvas.height = cameraVideo.videoHeight;
-      cameraCanvas.getContext("2d").drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+      const vw = cameraVideo.videoWidth, vh = cameraVideo.videoHeight;
+      const framed = activeCameraFrame.id !== 0;
+      // Framed shots are captured pre-cropped to the same square the guide
+      // showed live, so what the guest saw is exactly what they get.
+      const size = Math.min(vw, vh);
+      const sw = framed ? size : vw, sh = framed ? size : vh;
+      const sx = framed ? (vw - size) / 2 : 0, sy = framed ? (vh - size) / 2 : 0;
+      cameraCanvas.width = sw;
+      cameraCanvas.height = sh;
+      cameraCanvas.getContext("2d").drawImage(cameraVideo, sx, sy, sw, sh, 0, 0, sw, sh);
+      const shotFrame = activeCameraFrame;
       cameraCanvas.toBlob(blob => {
         if (!blob) return;
-        cameraShots.push({ blob, url: URL.createObjectURL(blob) });
+        cameraShots.push({ blob, url: URL.createObjectURL(blob), frameId: shotFrame.id, frameUrl: shotFrame.url });
         renderShots();
       }, "image/jpeg", 0.92);
     });
@@ -276,8 +347,7 @@
       cameraShotsEl.innerHTML = "";
       cameraShots.forEach((shot, index) => {
         const item = document.createElement("div"); item.className = "wcam-camera-shot";
-        const img = document.createElement("img"); img.src = shot.url; img.alt = `Captured photo ${index + 1}`;
-        item.appendChild(img);
+        item.appendChild(framedMedia(shot.url, shot.frameUrl, `Captured photo ${index + 1}`));
         const remove = document.createElement("button"); remove.type = "button"; remove.className = "wcam-camera-shot-remove"; remove.setAttribute("aria-label", "Remove this photo"); remove.textContent = "×";
         remove.addEventListener("click", () => { URL.revokeObjectURL(shot.url); cameraShots.splice(index, 1); renderShots(); });
         item.appendChild(remove);
@@ -323,10 +393,13 @@
         name: `camera-${Date.now()}-${index}.jpg`,
         previewUrl: shot.url,
         caption: "",
+        frameId: shot.frameId,
+        frameUrl: shot.frameUrl,
       })));
       cameraShots = [];
       renderShots();
       stopStream();
+      document.body.style.overflow = "";
       renderReview();
       goToStep("review");
     });

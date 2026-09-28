@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Wedding Camera
  * Description: Guest wedding photo uploads with a live in-browser camera, opt-in live wall, reversible frames, QR/NFC sharing, and admin controls.
- * Version: 0.7.2
+ * Version: 0.8.0
  * Author: Shannon & Alex
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'WCAM_VERSION', '0.7.2' );
+define( 'WCAM_VERSION', '0.8.0' );
 define( 'WCAM_URL', plugin_dir_url( __FILE__ ) );
 define( 'WCAM_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -447,14 +447,30 @@ HTML;
                 <p class="wcam-kicker"><?php echo esc_html( $settings['guest_eyebrow'] ); ?></p>
                 <h1><?php echo esc_html( $settings['guest_title'] ); ?></h1>
                 <p><?php echo esc_html( $settings['guest_intro'] ); ?></p>
+                <button type="button" id="wcam-help-btn" class="wcam-help-btn">❓ How does this work?</button>
             </section>
+
+            <div id="wcam-help-modal" class="wcam-help-modal" hidden>
+                <div class="wcam-help-backdrop" id="wcam-help-backdrop"></div>
+                <div class="wcam-help-card" role="dialog" aria-modal="true" aria-label="How to share your photos">
+                    <button type="button" id="wcam-help-close" class="wcam-help-close" aria-label="Close">✕</button>
+                    <h2>How to Share Your Photos</h2>
+                    <ol class="wcam-help-steps">
+                        <li><span class="wcam-help-num">1</span><span>Type your name. You only have to do this once.</span></li>
+                        <li><span class="wcam-help-num">2</span><span><strong>Take Photos</strong> uses your camera. <strong>Choose Photos</strong> picks from ones you already have.</span></li>
+                        <li><span class="wcam-help-num">3</span><span>Tap the big white circle to snap a photo. Take as many as you like.</span></li>
+                        <li><span class="wcam-help-num">4</span><span>Tap <strong>Use These Photos</strong> when you're finished taking pictures.</span></li>
+                        <li><span class="wcam-help-num">5</span><span>Tap the big button at the bottom to share your photos with us. That's it!</span></li>
+                    </ol>
+                </div>
+            </div>
 
             <?php if ( $settings['uploads_open'] !== '1' ) : ?>
                 <div class="wcam-card wcam-closed"><h2>Thank you for sharing the magic ✨</h2><p>Photo uploads are currently closed.</p></div>
             <?php else : ?>
             <div class="wcam-card wcam-wizard" id="wcam-wizard">
 
-                <section class="wcam-step" id="wcam-step-name" data-step="name">
+                <section class="wcam-step" id="wcam-step-name" data-step="name" hidden>
                     <h2>What's your name?</h2>
                     <p class="wcam-step-help">So we know who to thank ✨</p>
                     <input id="wcam-name" class="wcam-name-input" type="text" maxlength="80" autocomplete="name" placeholder="Your name">
@@ -479,12 +495,37 @@ HTML;
                     <div class="wcam-camera-viewport">
                         <video id="wcam-camera-video" playsinline autoplay muted></video>
                         <canvas id="wcam-camera-canvas" hidden></canvas>
+
+                        <?php if ( ! empty( $frames ) ) : ?>
+                        <div id="wcam-camera-frame-guide" class="wcam-camera-frame-guide" hidden>
+                            <div class="wcam-camera-scrim"></div>
+                            <div class="wcam-camera-square-guide">
+                                <img id="wcam-camera-frame-preview" class="wcam-camera-frame-preview" alt="">
+                            </div>
+                            <div class="wcam-camera-scrim"></div>
+                        </div>
+                        <?php endif; ?>
+
+                        <button type="button" id="wcam-camera-close" class="wcam-camera-icon-btn wcam-camera-close-btn" aria-label="Close camera">✕</button>
+                        <button type="button" id="wcam-camera-switch" class="wcam-camera-icon-btn wcam-camera-switch-btn" aria-label="Switch camera" hidden>🔄</button>
+
+                        <?php if ( ! empty( $frames ) ) : ?>
+                        <div class="wcam-camera-frame-chips" id="wcam-camera-frame-chips">
+                            <button type="button" class="wcam-frame-chip is-active" data-frame-id="0" data-frame-url="">
+                                <span class="wcam-frame-none">No Frame</span>
+                            </button>
+                            <?php foreach ( $frames as $frame ) : ?>
+                            <button type="button" class="wcam-frame-chip" data-frame-id="<?php echo esc_attr( $frame['id'] ); ?>" data-frame-url="<?php echo esc_url( $frame['url'] ); ?>">
+                                <span class="wcam-frame-thumb"><img src="<?php echo esc_url( $frame['url'] ); ?>" alt=""></span>
+                                <strong><?php echo esc_html( $frame['label'] ); ?></strong>
+                            </button>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     <p id="wcam-camera-error" class="wcam-camera-error" hidden></p>
                     <div class="wcam-camera-controls">
-                        <button type="button" id="wcam-camera-switch" class="wcam-mini-button" hidden>🔄 Switch Camera</button>
                         <button type="button" id="wcam-camera-shutter" class="wcam-shutter" aria-label="Take photo"></button>
-                        <button type="button" id="wcam-camera-close" class="wcam-mini-button">Close</button>
                     </div>
                     <div id="wcam-camera-shots" class="wcam-camera-shots"></div>
                     <button type="button" id="wcam-camera-save" class="wcam-mini-button wcam-save-photos" hidden>💾 Save to Photos (in case of issues)</button>
@@ -524,9 +565,13 @@ HTML;
             <?php endif; ?>
 
             <section id="wcam-my-photos" class="wcam-my-photos" hidden>
-                <h2>My Photos</h2>
-                <p>You can change whether your uploads appear on the Live Photo Wall.</p>
-                <div id="wcam-my-photo-grid" class="wcam-my-photo-grid"></div>
+                <button type="button" id="wcam-my-photos-toggle" class="wcam-my-photos-toggle" aria-expanded="false">
+                    <span id="wcam-my-photos-toggle-label">📷 Show My Pictures</span>
+                </button>
+                <div id="wcam-my-photos-panel" class="wcam-my-photos-panel" hidden>
+                    <p>You can change whether your uploads appear on the Live Photo Wall.</p>
+                    <div id="wcam-my-photo-grid" class="wcam-my-photo-grid"></div>
+                </div>
             </section>
         </div>
         <?php return ob_get_clean();

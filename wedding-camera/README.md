@@ -1,4 +1,4 @@
-# Wedding Camera v0.7.2
+# Wedding Camera v0.8.0
 
 Version 0.3 adds reversible Canva-style photo frames plus more admin controls while keeping the v0.1/v0.2 upload flow and shortcodes compatible.
 
@@ -160,3 +160,13 @@ If the scrolling rows still don't appear to move on a specific phone, the most c
 - **Skips the name step automatically** once a name is saved on that device — a guest doing several upload batches over the course of the wedding now lands straight on "Add Photos" after the first time.
 - **Bigger, more immersive live camera screen** — the viewfinder now uses noticeably more of the screen (the wizard card's own side padding shrinks specifically while the camera step is active, and the viewport's height cap was raised).
 - **"💾 Save to Photos" safety net for the in-app camera.** After taking photos with the built-in camera (not needed for gallery photos — those are already in their camera roll), a new button saves them straight to the guest's own device before upload even starts, via the phone's native share sheet ("Save Image(s)" → Photos on iPhone). That way a network hiccup or site issue during upload can never cost a guest their actual photos — they already have a copy.
+
+## v0.8.0
+
+A pass aimed squarely at "this only gets used on someone's phone at the wedding":
+
+- **"❓ How does this work?" button** right at the top of the page, for any guest (of any age) who's unsure. Opens a short, plain-language, large-text explanation of the whole process in five steps — no jargon.
+- **The camera is now genuinely full-screen** — edge-to-edge, like a real camera app, not a preview panel inside the page. The shutter, switch-camera, and close controls sit as overlays on top of the live view instead of taking up their own space below it, so the viewfinder itself is as big as the guest's whole screen.
+- **Live, Snapchat-style frame preview while taking photos.** A frame picker now lives right on the camera screen — tap a frame and the app immediately shows a square guide with that frame composited over the live camera feed, so guests see exactly what they'll get *before* they tap the shutter. Taking a photo with a frame selected captures pre-cropped to match; "No Frame" still captures your normal full shot. Each photo remembers whichever frame was active when it was taken (still changeable afterward in Review).
+- **"My Photos" is now collapsed by default**, behind a "📷 Show My Pictures (N)" button, instead of always taking up space on the page below the upload form.
+- **The name step is now fully hidden — not just skipped — once a name is saved**, with no flash of the field before it's hidden. First-time guests still see it once.
